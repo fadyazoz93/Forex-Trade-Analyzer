@@ -153,9 +153,19 @@ export default function App() {
   // 1. Initialize Market Data on Mount & Subscribe to High-Frequency Real-time Stream
   useEffect(() => {
     initializeMarketData();
-    fetchLiveExchangeRates();
+    forceSyncLivePrices().catch(() => {});
     setTicks(getAllTicks());
     setShieldStatus(getShieldStatus());
+
+    // Fetch initial server ticks if running in fullstack container
+    fetch('/api/market-data')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.ticks) {
+          setTicks(data.ticks);
+        }
+      })
+      .catch(() => {});
 
     // Initial instant scan
     handlePerformScan(engineRef.current);
@@ -223,10 +233,13 @@ export default function App() {
       );
     });
 
-    // High-frequency tick generator (Ticks 2-4 assets every 700ms)
+    // High-frequency micro-tick generator (Ticks 2-4 assets every 1200ms)
     const tickInterval = setInterval(() => {
-      emitBatchMarketTicks();
-    }, 700);
+      const shield = getShieldStatus();
+      if (!shield.isWeekendBlocked) {
+        emitBatchMarketTicks();
+      }
+    }, 1200);
 
     // Clock update interval for UTC server time and market hours
     const clockTimer = setInterval(() => {
@@ -234,10 +247,10 @@ export default function App() {
       setMarketHoursStatus(getMarketHoursStatus());
     }, 1000);
 
-    // Periodic exchange rate calibration
+    // Periodic exchange rate & spot precious metals calibration from genuine feeds
     const rateTimer = setInterval(() => {
-      fetchLiveExchangeRates();
-    }, 45000);
+      forceSyncLivePrices().catch(() => {});
+    }, 30000);
 
     // Backup sweep scan every 6 seconds to ensure no confluence is left behind
     const sweepInterval = setInterval(() => {

@@ -2,9 +2,16 @@ import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
-import { initializeMarketData, emitBatchMarketTicks, fetchLiveExchangeRates, forceSyncLivePrices } from './src/services/marketDataFeed';
+import {
+  initializeMarketData,
+  emitBatchMarketTicks,
+  fetchLiveExchangeRates,
+  forceSyncLivePrices,
+  getAllTicks,
+} from './src/services/marketDataFeed';
 import { scanMarketWatchSymbols } from './src/services/sopMatrixScanner';
 import { sendTradeSignalToTelegram, testTelegramConnection } from './src/services/telegramService';
+import { isWeekendMarketClosed } from './src/services/shieldMonitor';
 import {
   initializeDatabase,
   saveTradeSignalToDb,
@@ -48,25 +55,35 @@ function start24x7BackgroundScanner() {
   console.log('🚀 [Railway 24/7 Worker] Starting 24/7 Background Strategy Scanner...');
   console.log(`📡 Telegram Channel: ${CHANNEL_ID} | Auto-Send: ${AUTO_SEND}`);
 
-  // Initialize market data and live sync
+  // Initialize market data and immediately sync genuine interbank prices
   initializeMarketData();
-  forceSyncLivePrices().catch((err) => console.warn('Live price sync error:', err));
+  forceSyncLivePrices()
+    .then(() => console.log('✅ [Market Data] Initial real-time market prices synchronized.'))
+    .catch((err) => console.warn('⚠️ [Market Data] Initial price sync error:', err));
 
-  // Sync exchange rates every 60 seconds
+  // Sync genuine live exchange rates & precious metals spot every 30 seconds
   setInterval(() => {
-    fetchLiveExchangeRates().catch((err) => console.warn('Rate sync error:', err));
-  }, 60000);
+    forceSyncLivePrices().catch((err) => console.warn('⚠️ [Market Data] Live sync error:', err));
+  }, 30000);
 
-  // Market tick simulation loop every 2 seconds
+  // Micro-fluctuation loop every 3 seconds for realistic active chart ticking
   setInterval(() => {
-    emitBatchMarketTicks();
-  }, 2000);
+    // Only tick if market is not in weekend closure
+    if (!isWeekendMarketClosed()) {
+      emitBatchMarketTicks();
+    }
+  }, 3000);
 
   // Core strategy scan interval (runs every 6 seconds 24/7)
   setInterval(async () => {
     try {
       backgroundScansCount++;
       lastScanTimestamp = Date.now();
+
+      // Weekend Protection: if global market is closed, skip scanning to avoid invalid signals
+      if (isWeekendMarketClosed()) {
+        return;
+      }
 
       const { signals } = scanMarketWatchSymbols({
         engine: 'intraday',
@@ -85,7 +102,7 @@ function start24x7BackgroundScanner() {
             serverSignals.unshift(sig);
             if (serverSignals.length > 50) serverSignals.pop();
 
-            console.log(`⚡ [Railway 24/7 Worker] Confirmed Signal: ${sig.symbol} ${sig.orderType} (Score: ${sig.score}/5)`);
+            console.log(`⚡ [Railway 24/7 Worker] Confirmed Signal: ${sig.symbol} ${sig.orderType} (Score: ${sig.score}/5) @ ${sig.entryPrice}`);
 
             // Persist to Turso LibSQL Database
             saveTradeSignalToDb(sig)
@@ -133,6 +150,28 @@ app.get('/api/health', (req, res) => {
     timestamp: Date.now(),
     environment: process.env.NODE_ENV || 'development',
     serverPort: PORT,
+  });
+});
+
+// Real-time market prices endpoint for client sync
+app.get('/api/market-data', (req, res) => {
+  const ticks = getAllTicks();
+  res.json({
+    ticks,
+    timestamp: Date.now(),
+    isWeekendClosed: isWeekendMarketClosed(),
+  });
+});
+
+// Trigger immediate market price refresh from live feeds
+app.post('/api/market-data/sync', async (req, res) => {
+  await forceSyncLivePrices();
+  const ticks = getAllTicks();
+  res.json({
+    success: true,
+    ticks,
+    timestamp: Date.now(),
+    isWeekendClosed: isWeekendMarketClosed(),
   });
 });
 

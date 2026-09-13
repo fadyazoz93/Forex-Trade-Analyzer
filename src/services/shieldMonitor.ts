@@ -1,5 +1,19 @@
 import { ShieldStatus } from '../types';
 
+// 5. Weekend Market Closure (Friday 21:00 UTC through Sunday 21:00 UTC)
+export function isWeekendMarketClosed(date = new Date()): boolean {
+  const utcDay = date.getUTCDay(); // 0 = Sun, 5 = Fri, 6 = Sat
+  const utcHour = date.getUTCHours();
+  const utcMin = date.getUTCMinutes();
+  const curMin = utcHour * 60 + utcMin;
+
+  return (
+    utcDay === 6 || // All of Saturday
+    (utcDay === 0 && curMin < 21 * 60) || // Sunday before 21:00 UTC
+    (utcDay === 5 && curMin >= 21 * 60) // Friday after 21:00 UTC
+  );
+}
+
 export function getShieldStatus(): ShieldStatus {
   const now = new Date();
   const utcDay = now.getUTCDay(); // 0 = Sun, 5 = Fri
@@ -19,11 +33,8 @@ export function getShieldStatus(): ShieldStatus {
   // 4. Sunday Open: 21:00 - 23:30 UTC
   const isSundayOpenBlocked = utcDay === 0 && curMin >= 21 * 60 && curMin <= 23 * 60 + 30;
 
-  // 5. Weekend Market Closure (Friday 21:00 UTC through Sunday 21:00 UTC)
-  const isWeekendBlocked =
-    utcDay === 6 || // All of Saturday
-    (utcDay === 0 && curMin < 21 * 60) || // Sunday before 21:00 UTC
-    (utcDay === 5 && curMin >= 21 * 60); // Friday after 21:00 UTC
+  // 5. Weekend Market Closure
+  const isWeekendBlocked = isWeekendMarketClosed(now);
 
   // Active Sessions (Only populated if NOT in weekend closure)
   const activeSessions: string[] = [];

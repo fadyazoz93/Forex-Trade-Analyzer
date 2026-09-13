@@ -239,38 +239,107 @@ function initBinanceLiveStream() {
 }
 
 /**
- * Fallback / Polling REST fetcher for Gold Spot
+ * Recalibrate historical candles so technical indicators and Gann anchors align to real market price
  */
-async function fetchLiveBinanceGoldSpot() {
-  const startTime = Date.now();
-  try {
-    const res = await fetch('https://api.binance.com/api/v3/ticker/bookTicker?symbol=PAXGUSDT');
-    if (!res.ok) return;
-    const data = await res.json();
-    const latency = Date.now() - startTime;
+function recalibrateCandlesToPrice(store: SymbolCandleStore, newPrice: number, point: number) {
+  if (!store || newPrice <= 0) return;
+  const lastM1 = store.M1[store.M1.length - 1];
+  if (!lastM1) return;
+  const currentClose = lastM1.close;
+  const diff = newPrice - currentClose;
 
-    if (data && data.bidPrice && data.askPrice) {
-      const bid = parseFloat(data.bidPrice);
-      const ask = parseFloat(data.askPrice);
-      if (!isNaN(bid) && !isNaN(ask) && bid > 0) {
-        liveFeedStatus.latencyMs = latency;
-        handleLiveGoldTick(bid, ask);
+  // If price difference is noticeable (> 5 pips), shift entire candle history so indicators are anchored to real price
+  if (Math.abs(diff) > point * 5) {
+    const timeframes: (keyof SymbolCandleStore)[] = ['D1', 'H4', 'H1', 'M15', 'M5', 'M1'];
+    timeframes.forEach((tf) => {
+      const list = store[tf];
+      if (Array.isArray(list)) {
+        list.forEach((c) => {
+          c.open = Number((c.open + diff).toFixed(5));
+          c.high = Number((c.high + diff).toFixed(5));
+          c.low = Number((c.low + diff).toFixed(5));
+          c.close = Number((c.close + diff).toFixed(5));
+        });
+      }
+    });
+  } else {
+    // Normal micro-update of the active candle
+    updateLatestCandle(store.M1, newPrice);
+    updateLatestCandle(store.M5, newPrice);
+    updateLatestCandle(store.M15, newPrice);
+    updateLatestCandle(store.H1, newPrice);
+    updateLatestCandle(store.H4, newPrice);
+    updateLatestCandle(store.D1, newPrice);
+  }
+}
+
+/**
+ * Fallback / Polling REST fetcher for Gold & Silver Spot from real market sources
+ */
+export async function fetchLiveGoldAndSilverSpot() {
+  const startTime = Date.now();
+  let goldMid: number | null = null;
+  let silverMid: number | null = null;
+
+  // 1. Try real-time Gold Spot API
+  try {
+    const resGold = await fetch('https://api.gold-api.com/price/XAU');
+    if (resGold.ok) {
+      const data = await resGold.json();
+      if (data && typeof data.price === 'number' && data.price > 1000) {
+        goldMid = data.price;
       }
     }
-  } catch {
-    // Handled silently
+  } catch {}
+
+  // 2. Try real-time Silver Spot API
+  try {
+    const resSilver = await fetch('https://api.gold-api.com/price/XAG');
+    if (resSilver.ok) {
+      const data = await resSilver.json();
+      if (data && typeof data.price === 'number' && data.price > 10) {
+        silverMid = data.price;
+      }
+    }
+  } catch {}
+
+  // 3. Fallback for Gold: Binance PAXG/USDT (Physical Gold on-chain)
+  if (!goldMid) {
+    try {
+      const res = await fetch('https://api.binance.com/api/v3/ticker/bookTicker?symbol=PAXGUSDT');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.bidPrice && data.askPrice) {
+          const bid = parseFloat(data.bidPrice);
+          const ask = parseFloat(data.askPrice);
+          if (!isNaN(bid) && !isNaN(ask) && bid > 0) {
+            goldMid = (bid + ask) / 2;
+          }
+        }
+      }
+    } catch {}
   }
+
+  if (goldMid && goldMid > 0) {
+    liveFeedStatus.latencyMs = Date.now() - startTime;
+    handleLiveGoldTick(goldMid - 0.20, goldMid + 0.20, silverMid);
+  }
+}
+
+async function fetchLiveBinanceGoldSpot() {
+  return fetchLiveGoldAndSilverSpot();
 }
 
 /**
  * Handle incoming live spot tick for Gold and synchronize Silver
  */
-function handleLiveGoldTick(realBid: number, realAsk: number) {
+function handleLiveGoldTick(realBid: number, realAsk: number, explicitSilverPrice?: number | null) {
   const goldSym = TARGET_SYMBOLS.find((s) => s.id === 'XAUUSD');
   const silverSym = TARGET_SYMBOLS.find((s) => s.id === 'XAGUSD');
   if (!goldSym) return;
 
   const mid = (realBid + realAsk) / 2;
+  goldSym.initialPrice = Number(mid.toFixed(goldSym.digits));
   const spreadPts = Math.round(((realAsk - realBid) / goldSym.point) * 10);
   const now = Date.now();
 
@@ -287,19 +356,16 @@ function handleLiveGoldTick(realBid: number, realAsk: number) {
 
   const goldStore = candleDatabase.get('XAUUSD');
   if (goldStore) {
-    updateLatestCandle(goldStore.M1, mid);
-    updateLatestCandle(goldStore.M5, mid);
-    updateLatestCandle(goldStore.M15, mid);
-    updateLatestCandle(goldStore.H1, mid);
-    updateLatestCandle(goldStore.H4, mid);
-    updateLatestCandle(goldStore.D1, mid);
+    recalibrateCandlesToPrice(goldStore, mid, goldSym.point);
   }
 
-  // Synchronize Silver (XAG/USD) spot based on current gold/silver ratio (~67.45)
+  // Synchronize Silver (XAG/USD) spot
   let silverTick: MarketTick | null = null;
   if (silverSym) {
-    const goldToSilverRatio = 67.46;
-    const silverMid = Number((mid / goldToSilverRatio).toFixed(silverSym.digits));
+    const silverMid = explicitSilverPrice && explicitSilverPrice > 10
+      ? explicitSilverPrice
+      : Number((mid / 67.31).toFixed(silverSym.digits));
+    silverSym.initialPrice = Number(silverMid.toFixed(silverSym.digits));
     const halfSpread = (silverSym.typicalSpreadPts * silverSym.point) / 2;
     const silverBid = Number((silverMid - halfSpread).toFixed(silverSym.digits));
     const silverAsk = Number((silverMid + halfSpread).toFixed(silverSym.digits));
@@ -317,12 +383,7 @@ function handleLiveGoldTick(realBid: number, realAsk: number) {
 
     const silverStore = candleDatabase.get('XAGUSD');
     if (silverStore) {
-      updateLatestCandle(silverStore.M1, silverMid);
-      updateLatestCandle(silverStore.M5, silverMid);
-      updateLatestCandle(silverStore.M15, silverMid);
-      updateLatestCandle(silverStore.H1, silverMid);
-      updateLatestCandle(silverStore.H4, silverMid);
-      updateLatestCandle(silverStore.D1, silverMid);
+      recalibrateCandlesToPrice(silverStore, silverMid, silverSym.point);
     }
   }
 
@@ -331,7 +392,7 @@ function handleLiveGoldTick(realBid: number, realAsk: number) {
     isConnected: true,
     lastSyncTime: now,
     goldSpot: mid,
-    silverSpot: silverTick ? (silverTick.bid + silverTick.ask) / 2 : 64.45,
+    silverSpot: silverTick ? (silverTick.bid + silverTick.ask) / 2 : 64.62,
     totalTicksReceived: liveFeedStatus.totalTicksReceived + 1,
   };
   notifyStatusUpdate();
@@ -346,21 +407,28 @@ function handleLiveGoldTick(realBid: number, realAsk: number) {
 
 /**
  * Generate dynamic micro-movements for smooth real-time trading feel between server ticks
+ * Clamped strictly to within 1-2 pips of genuine market rates to prevent price distortion
  */
 export function simulateMarketTick(symbolConfig: SymbolConfig): MarketTick {
   const currentTick = latestTicks.get(symbolConfig.id);
   const store = candleDatabase.get(symbolConfig.id);
 
   const basePrice = currentTick ? (currentTick.bid + currentTick.ask) / 2 : symbolConfig.initialPrice;
-  const tickStep = symbolConfig.point * (Math.random() > 0.85 ? (symbolConfig.category === 'metal' ? 4 : 2) : 0.8);
-  const direction = Math.random() > 0.49 ? 1 : -1;
-  const newMid = Number((basePrice + direction * tickStep).toFixed(symbolConfig.digits));
+  const maxPipsDeviation = 1.5;
+  const deviation = basePrice - symbolConfig.initialPrice;
 
-  const dynamicSpread = Math.max(
-    symbolConfig.typicalSpreadPts - 2,
-    Math.min(symbolConfig.typicalSpreadPts + 4, Math.round(symbolConfig.typicalSpreadPts + (Math.random() * 4 - 2)))
-  );
+  // Mean-reversion to anchor tightly to the true market price
+  let direction = Math.random() > 0.5 ? 1 : -1;
+  if (deviation > maxPipsDeviation * symbolConfig.point * 10) {
+    direction = -1;
+  } else if (deviation < -maxPipsDeviation * symbolConfig.point * 10) {
+    direction = 1;
+  }
 
+  const microStep = symbolConfig.point * (symbolConfig.category === 'metal' ? 0.8 + Math.random() * 0.6 : 0.15 + Math.random() * 0.25);
+  const newMid = Number((basePrice + direction * microStep).toFixed(symbolConfig.digits));
+
+  const dynamicSpread = symbolConfig.typicalSpreadPts;
   const halfSpread = (dynamicSpread * symbolConfig.point) / 2;
   const bid = Number((newMid - halfSpread).toFixed(symbolConfig.digits));
   const ask = Number((newMid + halfSpread).toFixed(symbolConfig.digits));
@@ -371,18 +439,13 @@ export function simulateMarketTick(symbolConfig: SymbolConfig): MarketTick {
     ask,
     spreadPts: dynamicSpread,
     time: Date.now(),
-    change24h: currentTick ? currentTick.change24h + direction * 0.002 : 0.25,
+    change24h: currentTick ? currentTick.change24h : 0.25,
   };
 
   latestTicks.set(symbolConfig.id, tick);
 
   if (store) {
     updateLatestCandle(store.M1, newMid);
-    updateLatestCandle(store.M5, newMid);
-    updateLatestCandle(store.M15, newMid);
-    updateLatestCandle(store.H1, newMid);
-    updateLatestCandle(store.H4, newMid);
-    updateLatestCandle(store.D1, newMid);
   }
 
   return tick;
@@ -467,77 +530,89 @@ export function setCustomSymbolPrice(symbolId: string, newPrice: number): Market
  */
 export async function fetchLiveExchangeRates() {
   const start = Date.now();
+  let rates: Record<string, number> | null = null;
+
+  // 1. Try open.er-api.com
   try {
     const res = await fetch('https://open.er-api.com/v6/latest/USD');
-    if (!res.ok) return;
-    const data = await res.json();
-    if (!data || !data.rates) return;
-
-    const latency = Date.now() - start;
-    liveFeedStatus.latencyMs = latency;
-    liveFeedStatus.lastSyncTime = Date.now();
-    notifyStatusUpdate();
-
-    const rates = data.rates;
-    const updated: SymbolConfig[] = [];
-
-    TARGET_SYMBOLS.forEach((sym) => {
-      let realRate: number | null = null;
-      if (sym.id === 'EURUSD' && rates.EUR) realRate = 1 / rates.EUR;
-      else if (sym.id === 'GBPUSD' && rates.GBP) realRate = 1 / rates.GBP;
-      else if (sym.id === 'USDJPY' && rates.JPY) realRate = rates.JPY;
-      else if (sym.id === 'USDCHF' && rates.CHF) realRate = rates.CHF;
-      else if (sym.id === 'AUDUSD' && rates.AUD) realRate = 1 / rates.AUD;
-      else if (sym.id === 'USDCAD' && rates.CAD) realRate = rates.CAD;
-      else if (sym.id === 'NZDUSD' && rates.NZD) realRate = 1 / rates.NZD;
-      else if (sym.id === 'EURGBP' && rates.EUR && rates.GBP) realRate = rates.GBP / rates.EUR;
-      else if (sym.id === 'EURJPY' && rates.EUR && rates.JPY) realRate = rates.JPY / rates.EUR;
-      else if (sym.id === 'GBPJPY' && rates.GBP && rates.JPY) realRate = rates.JPY / rates.GBP;
-
-      if (realRate && realRate > 0) {
-        const store = candleDatabase.get(sym.id);
-        const halfSpread = (sym.typicalSpreadPts * sym.point) / 2;
-        const bid = Number((realRate - halfSpread).toFixed(sym.digits));
-        const ask = Number((realRate + halfSpread).toFixed(sym.digits));
-
-        latestTicks.set(sym.id, {
-          symbol: sym.symbol,
-          bid,
-          ask,
-          spreadPts: sym.typicalSpreadPts,
-          time: Date.now(),
-          change24h: 0.2,
-        });
-
-        if (store) {
-          updateLatestCandle(store.M1, realRate);
-          updateLatestCandle(store.M5, realRate);
-          updateLatestCandle(store.M15, realRate);
-          updateLatestCandle(store.H1, realRate);
-          updateLatestCandle(store.H4, realRate);
-          updateLatestCandle(store.D1, realRate);
-        }
-        updated.push(sym);
-      }
-    });
-
-    if (updated.length > 0) {
-      const allTicks = getAllTicks();
-      subscribers.forEach((sub) => {
-        sub(allTicks, updated);
-      });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.rates) rates = data.rates;
     }
-  } catch {
-    // Graceful fallback
+  } catch {}
+
+  // 2. Fallback to Frankfurter (ECB official rates)
+  if (!rates) {
+    try {
+      const res = await fetch('https://api.frankfurter.app/latest?from=USD');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.rates) {
+          rates = { ...data.rates, USD: 1 };
+        }
+      }
+    } catch {}
+  }
+
+  if (!rates) return;
+
+  const latency = Date.now() - start;
+  liveFeedStatus.latencyMs = latency;
+  liveFeedStatus.lastSyncTime = Date.now();
+  notifyStatusUpdate();
+
+  const updated: SymbolConfig[] = [];
+
+  TARGET_SYMBOLS.forEach((sym) => {
+    let realRate: number | null = null;
+    if (sym.id === 'EURUSD' && rates!.EUR) realRate = 1 / rates!.EUR;
+    else if (sym.id === 'GBPUSD' && rates!.GBP) realRate = 1 / rates!.GBP;
+    else if (sym.id === 'USDJPY' && rates!.JPY) realRate = rates!.JPY;
+    else if (sym.id === 'USDCHF' && rates!.CHF) realRate = rates!.CHF;
+    else if (sym.id === 'AUDUSD' && rates!.AUD) realRate = 1 / rates!.AUD;
+    else if (sym.id === 'USDCAD' && rates!.CAD) realRate = rates!.CAD;
+    else if (sym.id === 'NZDUSD' && rates!.NZD) realRate = 1 / rates!.NZD;
+    else if (sym.id === 'EURGBP' && rates!.EUR && rates!.GBP) realRate = rates!.GBP / rates!.EUR;
+    else if (sym.id === 'EURJPY' && rates!.EUR && rates!.JPY) realRate = rates!.JPY / rates!.EUR;
+    else if (sym.id === 'GBPJPY' && rates!.GBP && rates!.JPY) realRate = rates!.JPY / rates!.GBP;
+
+    if (realRate && realRate > 0) {
+      sym.initialPrice = Number(realRate.toFixed(sym.digits));
+      const store = candleDatabase.get(sym.id);
+      const halfSpread = (sym.typicalSpreadPts * sym.point) / 2;
+      const bid = Number((realRate - halfSpread).toFixed(sym.digits));
+      const ask = Number((realRate + halfSpread).toFixed(sym.digits));
+
+      latestTicks.set(sym.id, {
+        symbol: sym.symbol,
+        bid,
+        ask,
+        spreadPts: sym.typicalSpreadPts,
+        time: Date.now(),
+        change24h: 0.2,
+      });
+
+      if (store) {
+        recalibrateCandlesToPrice(store, realRate, sym.point);
+      }
+      updated.push(sym);
+    }
+  });
+
+  if (updated.length > 0) {
+    const allTicks = getAllTicks();
+    subscribers.forEach((sub) => {
+      sub(allTicks, updated);
+    });
   }
 }
 
 /**
- * Manually force sync prices immediately
+ * Manually force sync prices immediately from real spot and exchange feeds
  */
 export async function forceSyncLivePrices() {
   await Promise.allSettled([
-    fetchLiveBinanceGoldSpot(),
+    fetchLiveGoldAndSilverSpot(),
     fetchLiveExchangeRates(),
   ]);
 }

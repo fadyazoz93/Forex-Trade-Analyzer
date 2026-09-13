@@ -109,17 +109,21 @@ export async function sendTelegramMultiTarget(
 }
 
 /**
- * Helper to format price with dollar sign and appropriate precision
+ * Helper to format price with proper symbol conventions and precision
  */
-export function formatTelegramPrice(val: number): string {
-  if (isNaN(val) || val === undefined || val === null) return '$0.00';
-  if (val >= 50) {
-    return `$${val.toFixed(2)}`;
-  } else if (val >= 1) {
-    return `$${val.toFixed(4)}`;
-  } else {
-    return `$${val.toFixed(5)}`;
+export function formatTelegramPrice(val: number, symbol?: string): string {
+  if (isNaN(val) || val === undefined || val === null) return '0.00';
+  const isMetal = symbol?.includes('XAU') || symbol?.includes('XAG') || symbol?.includes('GOLD') || symbol?.includes('SILVER');
+  const isJpy = symbol?.includes('JPY');
+
+  if (isMetal) {
+    const dec = symbol?.includes('XAG') ? 3 : 2;
+    return `$${val.toFixed(dec)}`;
   }
+  if (isJpy) {
+    return val.toFixed(3);
+  }
+  return val.toFixed(5);
 }
 
 /**
@@ -132,27 +136,28 @@ export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true)
   // tp is the final target (tp4) as explicitly requested by user
   const tpFinal = signal.tpTargets?.tp4 ?? signal.entryPrice;
   const sl = signal.slPrice;
+  const sym = signal.symbol;
 
   if (forHtml) {
     return [
       `<b>${title}</b>`,
       `════════════════════`,
-      `🪙 العملة / الزوج: <b>${signal.symbol}</b>`,
-      `💵 السعر الحالي: <code>${formatTelegramPrice(currentPrice)}</code>`,
-      `🎯 سعر الدخول المقترح: <code>${formatTelegramPrice(signal.entryPrice)}</code>`,
-      `🎯 الهدف الموحد (TP): <code>${formatTelegramPrice(tpFinal)}</code>`,
-      `🛑 وقف الخسارة (SL): <code>${formatTelegramPrice(sl)}</code>`,
+      `🪙 العملة / الزوج: <b>${sym}</b>`,
+      `💵 السعر اللحظي الحالي: <code>${formatTelegramPrice(currentPrice, sym)}</code>`,
+      `🎯 سعر الدخول المقترح: <code>${formatTelegramPrice(signal.entryPrice, sym)}</code>`,
+      `🎯 الهدف الموحد (TP): <code>${formatTelegramPrice(tpFinal, sym)}</code>`,
+      `🛑 وقف الخسارة (SL): <code>${formatTelegramPrice(sl, sym)}</code>`,
     ].join('\n');
   }
 
   return [
     title,
     '════════════════════',
-    `🪙 العملة / الزوج: ${signal.symbol}`,
-    `💵 السعر الحالي: ${formatTelegramPrice(currentPrice)}`,
-    `🎯 سعر الدخول المقترح: ${formatTelegramPrice(signal.entryPrice)}`,
-    `🎯 الهدف الموحد (TP): ${formatTelegramPrice(tpFinal)}`,
-    `🛑 وقف الخسارة (SL): ${formatTelegramPrice(sl)}`,
+    `🪙 العملة / الزوج: ${sym}`,
+    `💵 السعر اللحظي الحالي: ${formatTelegramPrice(currentPrice, sym)}`,
+    `🎯 سعر الدخول المقترح: ${formatTelegramPrice(signal.entryPrice, sym)}`,
+    `🎯 الهدف الموحد (TP): ${formatTelegramPrice(tpFinal, sym)}`,
+    `🛑 وقف الخسارة (SL): ${formatTelegramPrice(sl, sym)}`,
   ].join('\n');
 }
 

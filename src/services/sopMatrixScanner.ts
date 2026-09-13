@@ -244,20 +244,27 @@ export function scanMarketWatchSymbols(
 
     // Check if long triggers
     if (evalLong.passed && evalLong.score >= (options.scoreNeeded || 4)) {
-      const quadTP = calculateQuadTargets(evalLong.entryPrice, evalLong.riskDist, true, sym.digits);
-      const isLimit = Math.abs(evalLong.entryPrice - evalLong.sq9Level) > sym.point * 15;
+      const liveEntryPrice = tick.ask;
+      const riskDistance = evalLong.riskDist;
+      let structuralSL = evalLong.structuralSL;
+      if (structuralSL >= liveEntryPrice) {
+        structuralSL = Number((liveEntryPrice - riskDistance).toFixed(sym.digits));
+      }
+      const actualRisk = Math.abs(liveEntryPrice - structuralSL);
+      const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, true, sym.digits);
 
       signals.push({
         id: `SIG_${sym.id}_LONG_${Date.now()}`,
         symbol: sym.symbol,
         engine: 'intraday',
         magicNumber: 1001,
-        orderType: isLimit ? 'BUY_LIMIT' : 'BUY',
-        isLimit,
-        entryPrice: isLimit ? evalLong.sq9Level : evalLong.entryPrice,
-        slPrice: evalLong.structuralSL,
+        orderType: 'BUY',
+        isLimit: false,
+        entryPrice: liveEntryPrice,
+        currentPrice: tick.ask,
+        slPrice: structuralSL,
         tpTargets: quadTP,
-        riskDistance: evalLong.riskDist,
+        riskDistance: actualRisk,
         riskRewardRatio: '1:2 (Quad 0.5R, 1.0R, 1.5R, 2.0R)',
         score: evalLong.score,
         gates: evalLong,
@@ -266,26 +273,33 @@ export function scanMarketWatchSymbols(
         timeFormatted: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         comment: 'Gann Intraday V42',
         telegramSent: false,
-        lotSize: calculateLotPreview(sym, evalLong.entryPrice, evalLong.structuralSL),
+        lotSize: calculateLotPreview(sym, liveEntryPrice, structuralSL),
       });
     }
 
     // Check if short triggers
     if (evalShort.passed && evalShort.score >= (options.scoreNeeded || 4)) {
-      const quadTP = calculateQuadTargets(evalShort.entryPrice, evalShort.riskDist, false, sym.digits);
-      const isLimit = Math.abs(evalShort.entryPrice - evalShort.sq9Level) > sym.point * 15;
+      const liveEntryPrice = tick.bid;
+      const riskDistance = evalShort.riskDist;
+      let structuralSL = evalShort.structuralSL;
+      if (structuralSL <= liveEntryPrice) {
+        structuralSL = Number((liveEntryPrice + riskDistance).toFixed(sym.digits));
+      }
+      const actualRisk = Math.abs(liveEntryPrice - structuralSL);
+      const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, false, sym.digits);
 
       signals.push({
         id: `SIG_${sym.id}_SHORT_${Date.now()}`,
         symbol: sym.symbol,
         engine: 'intraday',
         magicNumber: 1001,
-        orderType: isLimit ? 'SELL_LIMIT' : 'SELL',
-        isLimit,
-        entryPrice: isLimit ? evalShort.sq9Level : evalShort.entryPrice,
-        slPrice: evalShort.structuralSL,
+        orderType: 'SELL',
+        isLimit: false,
+        entryPrice: liveEntryPrice,
+        currentPrice: tick.bid,
+        slPrice: structuralSL,
         tpTargets: quadTP,
-        riskDistance: evalShort.riskDist,
+        riskDistance: actualRisk,
         riskRewardRatio: '1:2 (Quad 0.5R, 1.0R, 1.5R, 2.0R)',
         score: evalShort.score,
         gates: evalShort,
@@ -294,7 +308,7 @@ export function scanMarketWatchSymbols(
         timeFormatted: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         comment: 'Gann Intraday V42',
         telegramSent: false,
-        lotSize: calculateLotPreview(sym, evalShort.entryPrice, evalShort.structuralSL),
+        lotSize: calculateLotPreview(sym, liveEntryPrice, structuralSL),
       });
     }
   });
@@ -322,20 +336,27 @@ export function evaluateSingleSymbolOnTick(
   let newSignal: TradeSignal | null = null;
 
   if (evalLong.passed && evalLong.score >= scoreNeeded) {
-    const quadTP = calculateQuadTargets(evalLong.entryPrice, evalLong.riskDist, true, sym.digits);
-    const isLimit = Math.abs(evalLong.entryPrice - evalLong.sq9Level) > sym.point * 15;
+    const liveEntryPrice = currentTick.ask;
+    const riskDistance = evalLong.riskDist;
+    let structuralSL = evalLong.structuralSL;
+    if (structuralSL >= liveEntryPrice) {
+      structuralSL = Number((liveEntryPrice - riskDistance).toFixed(sym.digits));
+    }
+    const actualRisk = Math.abs(liveEntryPrice - structuralSL);
+    const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, true, sym.digits);
 
     newSignal = {
       id: `SIG_${sym.id}_LONG_${Date.now()}`,
       symbol: sym.symbol,
       engine: 'intraday',
       magicNumber: 1001,
-      orderType: isLimit ? 'BUY_LIMIT' : 'BUY',
-      isLimit,
-      entryPrice: isLimit ? evalLong.sq9Level : evalLong.entryPrice,
-      slPrice: evalLong.structuralSL,
+      orderType: 'BUY',
+      isLimit: false,
+      entryPrice: liveEntryPrice,
+      currentPrice: currentTick.ask,
+      slPrice: structuralSL,
       tpTargets: quadTP,
-      riskDistance: evalLong.riskDist,
+      riskDistance: actualRisk,
       riskRewardRatio: '1:2 (Quad 0.5R, 1.0R, 1.5R, 2.0R)',
       score: evalLong.score,
       gates: evalLong,
@@ -348,8 +369,7 @@ export function evaluateSingleSymbolOnTick(
       }),
       comment: 'Gann Intraday V42',
       telegramSent: false,
-      lotSize: calculateLotPreview(sym, evalLong.entryPrice, evalLong.structuralSL),
-      currentPrice: currentTick.bid,
+      lotSize: calculateLotPreview(sym, liveEntryPrice, structuralSL),
       livePips: 0,
       livePnL: 0,
       breakEvenActive: false,
@@ -357,20 +377,27 @@ export function evaluateSingleSymbolOnTick(
       isRealtimeUpdate: true,
     };
   } else if (evalShort.passed && evalShort.score >= scoreNeeded) {
-    const quadTP = calculateQuadTargets(evalShort.entryPrice, evalShort.riskDist, false, sym.digits);
-    const isLimit = Math.abs(evalShort.entryPrice - evalShort.sq9Level) > sym.point * 15;
+    const liveEntryPrice = currentTick.bid;
+    const riskDistance = evalShort.riskDist;
+    let structuralSL = evalShort.structuralSL;
+    if (structuralSL <= liveEntryPrice) {
+      structuralSL = Number((liveEntryPrice + riskDistance).toFixed(sym.digits));
+    }
+    const actualRisk = Math.abs(liveEntryPrice - structuralSL);
+    const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, false, sym.digits);
 
     newSignal = {
       id: `SIG_${sym.id}_SHORT_${Date.now()}`,
       symbol: sym.symbol,
       engine: 'intraday',
       magicNumber: 1001,
-      orderType: isLimit ? 'SELL_LIMIT' : 'SELL',
-      isLimit,
-      entryPrice: isLimit ? evalShort.sq9Level : evalShort.entryPrice,
-      slPrice: evalShort.structuralSL,
+      orderType: 'SELL',
+      isLimit: false,
+      entryPrice: liveEntryPrice,
+      currentPrice: currentTick.bid,
+      slPrice: structuralSL,
       tpTargets: quadTP,
-      riskDistance: evalShort.riskDist,
+      riskDistance: actualRisk,
       riskRewardRatio: '1:2 (Quad 0.5R, 1.0R, 1.5R, 2.0R)',
       score: evalShort.score,
       gates: evalShort,
@@ -383,8 +410,7 @@ export function evaluateSingleSymbolOnTick(
       }),
       comment: 'Gann Intraday V42',
       telegramSent: false,
-      lotSize: calculateLotPreview(sym, evalShort.entryPrice, evalShort.structuralSL),
-      currentPrice: currentTick.ask,
+      lotSize: calculateLotPreview(sym, liveEntryPrice, structuralSL),
       livePips: 0,
       livePnL: 0,
       breakEvenActive: false,
