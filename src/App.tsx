@@ -11,7 +11,10 @@ import { SignalHistoryTable } from './components/SignalHistoryTable';
 import { StrategyMatrixExplainer } from './components/StrategyMatrixExplainer';
 import { TelegramModal } from './components/TelegramModal';
 import { DatabaseModal } from './components/DatabaseModal';
+import { SessionHolidayModal } from './components/SessionHolidayModal';
+import { SessionHolidayNoticeBanner } from './components/SessionHolidayNoticeBanner';
 import { TARGET_SYMBOLS } from './data/symbols';
+import { getMarketHoursStatus, MarketHoursStatus } from './services/marketHoursService';
 import {
   emitBatchMarketTicks,
   fetchLiveExchangeRates,
@@ -92,6 +95,8 @@ export default function App() {
   const [isRiskModalOpen, setIsRiskModalOpen] = useState(false);
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
+  const [isSessionHolidayModalOpen, setIsSessionHolidayModalOpen] = useState(false);
+  const [marketHoursStatus, setMarketHoursStatus] = useState<MarketHoursStatus>(() => getMarketHoursStatus());
 
   // Settings state
   const [riskSettings, setRiskSettings] = useState<AccountRiskSettings>({
@@ -223,10 +228,11 @@ export default function App() {
       emitBatchMarketTicks();
     }, 700);
 
-    // Clock update interval for UTC server time
+    // Clock update interval for UTC server time and market hours
     const clockTimer = setInterval(() => {
       setShieldStatus(getShieldStatus());
-    }, 15000);
+      setMarketHoursStatus(getMarketHoursStatus());
+    }, 1000);
 
     // Periodic exchange rate calibration
     const rateTimer = setInterval(() => {
@@ -529,11 +535,19 @@ export default function App() {
         onOpenTelegramSettings={() => setIsTelegramModalOpen(true)}
         onOpenRiskCalc={() => setIsRiskModalOpen(true)}
         onOpenDatabase={() => setIsDatabaseModalOpen(true)}
+        onOpenSessionHolidays={() => setIsSessionHolidayModalOpen(true)}
+        isWeekend={marketHoursStatus.isWeekend}
         shieldStatus={shieldStatus}
         activeSignalCount={activeSignals.length}
         isAudioOn={isAudioOn}
         onToggleAudio={handleToggleAudio}
         tickCount={tickCount}
+      />
+
+      {/* Smart Notification Banner for Sessions and Market Holidays */}
+      <SessionHolidayNoticeBanner
+        status={marketHoursStatus}
+        onOpenFullSchedule={() => setIsSessionHolidayModalOpen(true)}
       />
 
       {/* Protective Shield & Session Telemetry Banner */}
@@ -547,7 +561,7 @@ export default function App() {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Real-time Global Forex Market Sessions Clock */}
-        <MarketSessionsClock />
+        <MarketSessionsClock onOpenSchedule={() => setIsSessionHolidayModalOpen(true)} />
 
         {/* Active Real-Time Trading Signals Feed */}
         <SignalFeed
@@ -642,6 +656,13 @@ export default function App() {
       <DatabaseModal
         isOpen={isDatabaseModalOpen}
         onClose={() => setIsDatabaseModalOpen(false)}
+      />
+
+      {/* Sessions and Holidays Comprehensive Modal */}
+      <SessionHolidayModal
+        isOpen={isSessionHolidayModalOpen}
+        onClose={() => setIsSessionHolidayModalOpen(false)}
+        status={marketHoursStatus}
       />
     </div>
   );

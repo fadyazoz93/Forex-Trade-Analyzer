@@ -1,83 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Globe, Zap, Moon, Sun, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Clock, Globe, Zap, Moon, Sun, AlertCircle, ChevronDown, ChevronUp, Calendar, Sparkles } from 'lucide-react';
+import { getMarketHoursStatus, SESSIONS_LIST } from '../services/marketHoursService';
 
-interface MarketSession {
-  id: string;
-  nameAr: string;
-  nameEn: string;
-  city: string;
-  flag: string;
-  openUtcHour: number; // UTC hour
-  closeUtcHour: number; // UTC hour
-  highLiquidity: boolean;
-  color: string;
+interface MarketSessionsClockProps {
+  onOpenSchedule?: () => void;
 }
 
-const SESSIONS: MarketSession[] = [
-  {
-    id: 'sydney',
-    nameAr: 'جلسة سيدني',
-    nameEn: 'Sydney',
-    city: 'سيدني',
-    flag: '🇦🇺',
-    openUtcHour: 21,
-    closeUtcHour: 6,
-    highLiquidity: false,
-    color: 'border-indigo-500/40 text-indigo-300 bg-indigo-500/10',
-  },
-  {
-    id: 'tokyo',
-    nameAr: 'جلسة طوكيو',
-    nameEn: 'Tokyo',
-    city: 'طوكيو',
-    flag: '🇯🇵',
-    openUtcHour: 0,
-    closeUtcHour: 9,
-    highLiquidity: false,
-    color: 'border-pink-500/40 text-pink-300 bg-pink-500/10',
-  },
-  {
-    id: 'london',
-    nameAr: 'جلسة لندن',
-    nameEn: 'London',
-    city: 'لندن',
-    flag: '🇬🇧',
-    openUtcHour: 7,
-    closeUtcHour: 16,
-    highLiquidity: true,
-    color: 'border-cyan-500/40 text-cyan-300 bg-cyan-500/10',
-  },
-  {
-    id: 'newyork',
-    nameAr: 'جلسة نيويورك',
-    nameEn: 'New York',
-    city: 'نيويورك',
-    flag: '🇺🇸',
-    openUtcHour: 12,
-    closeUtcHour: 21,
-    highLiquidity: true,
-    color: 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10',
-  },
-];
-
-function isSessionOpen(nowUtcHour: number, openHour: number, closeHour: number): boolean {
-  if (openHour < closeHour) {
-    return nowUtcHour >= openHour && nowUtcHour < closeHour;
-  }
-  // Wraps over midnight (e.g. Sydney 21:00 - 06:00)
-  return nowUtcHour >= openHour || nowUtcHour < closeHour;
-}
-
-function getTimeUntil(nowUtcMinutes: number, targetUtcHour: number): string {
-  const targetMinutes = targetUtcHour * 60;
-  let diff = targetMinutes - nowUtcMinutes;
-  if (diff < 0) diff += 24 * 60;
-  const hours = Math.floor(diff / 60);
-  const mins = diff % 60;
-  return `${hours}س ${mins}د`;
-}
-
-export const MarketSessionsClock: React.FC = () => {
+export const MarketSessionsClock: React.FC<MarketSessionsClockProps> = ({ onOpenSchedule }) => {
   const [now, setNow] = useState<Date>(new Date());
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
 
@@ -88,52 +17,36 @@ export const MarketSessionsClock: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const utcHours = now.getUTCHours();
-  const utcMinutes = now.getUTCMinutes();
+  const marketStatus = getMarketHoursStatus(now);
+  const { isWeekend, isMarketOpen, isGoldenOverlap, utcHours, utcMinutes, notification } = marketStatus;
   const utcTotalMinutes = utcHours * 60 + utcMinutes;
   const currentUtcDec = utcHours + utcMinutes / 60;
 
-  // Check Overlap: London & New York (12:00 to 16:00 UTC)
-  const isLondonOpen = isSessionOpen(currentUtcDec, 7, 16);
-  const isNewYorkOpen = isSessionOpen(currentUtcDec, 12, 21);
-  const isTokyoOpen = isSessionOpen(currentUtcDec, 0, 9);
-  const isSydneyOpen = isSessionOpen(currentUtcDec, 21, 6);
-  const isLondonNyOverlap = isLondonOpen && isNewYorkOpen;
-
-  // Overall Liquidity status
+  // Liquidity status
   let liquidityLevel = 'متوسطة';
   let liquidityBadgeClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
   let liquidityTip = 'سيولة اعتيادية مناسبة للمراقبة وتحضير صفقات اليومي';
 
-  if (isLondonNyOverlap) {
+  if (isWeekend) {
+    liquidityLevel = 'عطلة أسبوعية (مغلق)';
+    liquidityBadgeClass = 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+    liquidityTip = `الأسواق مغلقة حالياً • يفتتح السوق مع جلسة سيدني الأحد 21:00 UTC (باقي: ${marketStatus.weekendOpensIn})`;
+  } else if (isGoldenOverlap) {
     liquidityLevel = 'سيولة عظمى (Peak Overlap ⚡)';
     liquidityBadgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm shadow-emerald-500/20';
     liquidityTip = 'فترة تداخل لندن ونيويورك الذهبية: أعلى حجم تداول واكتمال أسرع لأهداف 1:2 R:R';
-  } else if (isLondonOpen || isNewYorkOpen) {
-    liquidityLevel = 'سيولة مرتفعة (High)';
-    liquidityBadgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
-    liquidityTip = 'جلسة رئيسية نشطة: تحركات اتجاهية واضحة لكسر مستويات جان ومربع التسعة';
-  } else if (isTokyoOpen || isSydneyOpen) {
-    liquidityLevel = 'سيولة آسيوية (Asian Session)';
-    liquidityBadgeClass = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
-    liquidityTip = 'تذبذب هادئ ونطاقات أفقية: مفضل مراقبة أزواج الين أو انتظار جلسة لندن';
+  } else if (marketStatus.activeSessions.length > 0) {
+    const hasLondonOrNY = marketStatus.activeSessions.some((s) => s.id === 'london' || s.id === 'newyork');
+    if (hasLondonOrNY) {
+      liquidityLevel = 'سيولة مرتفعة (High)';
+      liquidityBadgeClass = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40';
+      liquidityTip = 'جلسة رئيسية نشطة: تحركات اتجاهية واضحة لكسر مستويات جان ومربع التسعة';
+    } else {
+      liquidityLevel = 'سيولة آسيوية (Asian Session)';
+      liquidityBadgeClass = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
+      liquidityTip = 'تذبذب هادئ ونطاقات أفقية: مفضل مراقبة أزواج الين أو انتظار جلسة لندن';
+    }
   }
-
-  // Format UTC string
-  const utcString = now.toLocaleTimeString('en-GB', {
-    timeZone: 'UTC',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-
-  // Format Local string
-  const localString = now.toLocaleTimeString('ar-EG', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-xl mb-4 transition-all">
@@ -141,8 +54,12 @@ export const MarketSessionsClock: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
-              <Globe className="w-4 h-4 sm:w-5 sm:h-5" />
+            <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+              isWeekend
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                : 'bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border-cyan-500/30 text-cyan-400'
+            }`}>
+              {isWeekend ? <Moon className="w-4 h-4 sm:w-5 sm:h-5" /> : <Globe className="w-4 h-4 sm:w-5 sm:h-5" />}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -152,6 +69,17 @@ export const MarketSessionsClock: React.FC = () => {
                 <span className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full border ${liquidityBadgeClass}`}>
                   {liquidityLevel}
                 </span>
+
+                {onOpenSchedule && (
+                  <button
+                    onClick={onOpenSchedule}
+                    className="text-[10px] font-semibold text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 px-2 py-0.5 rounded-full border border-cyan-500/30 transition-all flex items-center gap-1 cursor-pointer"
+                    title="استعراض جدول مواعيد الجلسات والعطلات"
+                  >
+                    <Calendar className="w-3 h-3" />
+                    <span>جدول العطلات والجلسات</span>
+                  </button>
+                )}
               </div>
               <p className="text-[10px] sm:text-[11px] text-slate-400 hidden md:block">
                 {liquidityTip}
@@ -173,13 +101,13 @@ export const MarketSessionsClock: React.FC = () => {
           <div className="flex items-center justify-between sm:justify-start gap-2 bg-slate-950 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-mono w-full sm:w-auto">
             <div className="flex items-center gap-1.5 text-cyan-300">
               <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="font-bold">{utcString}</span>
+              <span className="font-bold">{marketStatus.utcTimeFormatted}</span>
               <span className="text-[9px] sm:text-[10px] text-slate-500 font-sans">UTC</span>
             </div>
             <span className="text-slate-700">|</span>
             <div className="flex items-center gap-1 text-slate-300">
               <span className="text-[9px] sm:text-[10px] text-slate-400 font-sans">محلي:</span>
-              <span className="font-bold">{localString}</span>
+              <span className="font-bold">{marketStatus.localTimeFormatted}</span>
             </div>
           </div>
 
@@ -196,20 +124,59 @@ export const MarketSessionsClock: React.FC = () => {
       {/* Expandable Sessions Cards & Timeline */}
       {isExpanded && (
         <div className="mt-3.5 pt-3 border-t border-slate-800/80 space-y-3">
+          
+          {/* If weekend, display a clear, reassuring weekend notice block */}
+          {isWeekend && (
+            <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2.5">
+                <Moon className="w-4 h-4 text-rose-400 shrink-0" />
+                <div>
+                  <span className="font-bold text-rose-300">إشعار عطلة نهاية الأسبوع (الأسواق مغلقة حالياً):</span>
+                  <span className="text-slate-300 mr-1.5">
+                    تستأنف التداولات يوم الأحد 21:00 UTC مع بداية جلسة سيدني.
+                  </span>
+                </div>
+              </div>
+              <div className="text-rose-300 font-mono font-bold whitespace-nowrap">
+                متبقي على الافتتاح: {marketStatus.weekendOpensIn}
+              </div>
+            </div>
+          )}
+
           {/* Sessions Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {SESSIONS.map((session) => {
-              const open = isSessionOpen(currentUtcDec, session.openUtcHour, session.closeUtcHour);
-              const timeRemaining = open
-                ? getTimeUntil(utcTotalMinutes, session.closeUtcHour)
-                : getTimeUntil(utcTotalMinutes, session.openUtcHour);
+            {SESSIONS_LIST.map((session) => {
+              const open = isMarketOpen && marketStatus.activeSessions.some((s) => s.id === session.id);
+              
+              // Calculate countdown
+              let timeRemaining = '';
+              if (isWeekend) {
+                if (session.id === 'sydney') {
+                  timeRemaining = `تفتتح: ${marketStatus.weekendOpensIn}`;
+                } else {
+                  timeRemaining = 'عطلة أسبوعية';
+                }
+              } else {
+                const targetMins = (open ? session.closeUtcHour : session.openUtcHour) * 60;
+                let diff = targetMins - utcTotalMinutes;
+                if (diff < 0) diff += 24 * 60;
+                const hours = Math.floor(diff / 60);
+                const mins = diff % 60;
+                timeRemaining = `${hours}س ${mins}د`;
+              }
+
+              let statusText = 'مغلقة';
+              if (open) statusText = 'مفتوحة الآن';
+              else if (isWeekend) statusText = 'عطلة';
 
               return (
                 <div
                   key={session.id}
                   className={`p-2.5 sm:p-3 rounded-xl border transition-all ${
                     open
-                      ? `${session.color} shadow-sm`
+                      ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10 shadow-sm'
+                      : isWeekend
+                      ? 'bg-slate-950/40 border-slate-800/60 text-slate-500'
                       : 'bg-slate-950/60 border-slate-800/80 text-slate-400'
                   }`}
                 >
@@ -222,10 +189,12 @@ export const MarketSessionsClock: React.FC = () => {
                       className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
                         open
                           ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 animate-pulse'
+                          : isWeekend
+                          ? 'bg-slate-800/60 text-slate-500'
                           : 'bg-slate-800 text-slate-500'
                       }`}
                     >
-                      {open ? 'مفتوحة الآن' : 'مغلقة'}
+                      {statusText}
                     </span>
                   </div>
 
@@ -237,7 +206,7 @@ export const MarketSessionsClock: React.FC = () => {
 
                   <div className="text-[10px] mt-1 flex items-center justify-between text-slate-300">
                     <span className="text-slate-400">
-                      {open ? 'تغلق خلال:' : 'تفتتح خلال:'}
+                      {open ? 'تغلق خلال:' : 'الحالة:'}
                     </span>
                     <span className="font-mono font-bold text-white">
                       {timeRemaining}

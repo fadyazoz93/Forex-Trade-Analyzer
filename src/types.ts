@@ -139,6 +139,7 @@ export interface ShieldStatus {
   isRolloverBlocked: boolean;
   isFridayAfternoonBlocked: boolean;
   isSundayOpenBlocked: boolean;
+  isWeekendBlocked?: boolean;
   isSessionActive: boolean;
   isNewsUpcoming: boolean;
   isDailyLossHit: boolean;

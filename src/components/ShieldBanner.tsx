@@ -29,9 +29,20 @@ export const ShieldBanner: React.FC<ShieldBannerProps> = ({
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800/70 border border-slate-700/50">
             <span className="text-slate-400 text-[11px] sm:text-xs">الجلسات:</span>
             <span className="font-semibold text-cyan-300 text-[11px] sm:text-xs">
-              {status.activeSessions.length > 0 ? status.activeSessions.join(' + ') : 'فترة هدوء'}
+              {status.isWeekendBlocked
+                ? 'عطلة أسبوعية'
+                : status.activeSessions.length > 0
+                ? status.activeSessions.join(' + ')
+                : 'فترة هدوء'}
             </span>
           </div>
+
+          {status.isWeekendBlocked && (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px]">
+              <Lock className="w-3.5 h-3.5 shrink-0" />
+              <span>عطلة نهاية الأسبوع (السوق مغلق)</span>
+            </div>
+          )}
 
           {status.isFridayAfternoonBlocked && (
             <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px]">

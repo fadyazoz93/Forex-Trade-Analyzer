@@ -19,14 +19,23 @@ export function getShieldStatus(): ShieldStatus {
   // 4. Sunday Open: 21:00 - 23:30 UTC
   const isSundayOpenBlocked = utcDay === 0 && curMin >= 21 * 60 && curMin <= 23 * 60 + 30;
 
-  // Active Sessions
-  const activeSessions: string[] = [];
-  if (curMin >= 0 && curMin < 9 * 60) activeSessions.push('طوكيو (Asian)');
-  if (curMin >= 8 * 60 && curMin < 17 * 60) activeSessions.push('لندن (London)');
-  if (curMin >= 13 * 60 && curMin < 22 * 60) activeSessions.push('نيويورك (New York)');
+  // 5. Weekend Market Closure (Friday 21:00 UTC through Sunday 21:00 UTC)
+  const isWeekendBlocked =
+    utcDay === 6 || // All of Saturday
+    (utcDay === 0 && curMin < 21 * 60) || // Sunday before 21:00 UTC
+    (utcDay === 5 && curMin >= 21 * 60); // Friday after 21:00 UTC
 
-  // Main trading window 08:00 - 19:00 server (UTC+2 = 06:00 - 17:00 UTC)
+  // Active Sessions (Only populated if NOT in weekend closure)
+  const activeSessions: string[] = [];
+  if (!isWeekendBlocked) {
+    if (curMin >= 0 && curMin < 9 * 60) activeSessions.push('طوكيو (Asian)');
+    if (curMin >= 8 * 60 && curMin < 17 * 60) activeSessions.push('لندن (London)');
+    if (curMin >= 13 * 60 && curMin < 22 * 60) activeSessions.push('نيويورك (New York)');
+  }
+
+  // Main trading window
   const isSessionActive =
+    !isWeekendBlocked &&
     !isLondonFixBlocked &&
     !isRolloverBlocked &&
     !isFridayAfternoonBlocked &&
@@ -38,6 +47,7 @@ export function getShieldStatus(): ShieldStatus {
     isRolloverBlocked,
     isFridayAfternoonBlocked,
     isSundayOpenBlocked,
+    isWeekendBlocked,
     isSessionActive,
     isNewsUpcoming: false,
     isDailyLossHit: false,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Clock, Send, Shield, Volume2, VolumeX, Zap, Radio, TrendingUp, Database } from 'lucide-react';
+import { Activity, Clock, Send, Shield, Volume2, VolumeX, Zap, Radio, TrendingUp, Database, Calendar } from 'lucide-react';
 import { EngineMode, ShieldStatus } from '../types';
 
 interface HeaderProps {
@@ -9,6 +9,8 @@ interface HeaderProps {
   onOpenTelegramSettings: () => void;
   onOpenRiskCalc: () => void;
   onOpenDatabase: () => void;
+  onOpenSessionHolidays?: () => void;
+  isWeekend?: boolean;
   shieldStatus: ShieldStatus;
   activeSignalCount: number;
   isAudioOn: boolean;
@@ -21,6 +23,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenTelegramSettings,
   onOpenRiskCalc,
   onOpenDatabase,
+  onOpenSessionHolidays,
+  isWeekend = false,
   shieldStatus,
   activeSignalCount,
   isAudioOn,
@@ -101,6 +105,27 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             )}
           </button>
+
+          {/* Sessions & Holidays Schedule Button */}
+          {onOpenSessionHolidays && (
+            <button
+              onClick={onOpenSessionHolidays}
+              className={`min-h-[38px] sm:min-h-auto px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                isWeekend
+                  ? 'bg-rose-500/15 border-rose-500/30 text-rose-300 hover:bg-rose-500/25'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+              }`}
+              title="مواعيد عمل الجلسات الأربع والتقويم السنوي للعطلات الرسمية"
+            >
+              <Calendar className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${isWeekend ? 'text-rose-400' : 'text-cyan-400'}`} />
+              <span className="hidden xs:inline">الجلسات والعطلات</span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isWeekend ? 'bg-rose-400' : 'bg-emerald-400 animate-pulse'
+                }`}
+              />
+            </button>
+          )}
 
           {/* Risk Engine Button */}
           <button
