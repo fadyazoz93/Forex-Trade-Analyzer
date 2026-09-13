@@ -1,0 +1,6 @@
+{
+  "name": "Forex Trade Analyzer",
+  "description": "Forex Trade Analyzer - منصة التحليل المتقدم وإشارات تداول العملات والمعادن بنظام SOP Gann ومصفوفة القواعد الخمس",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
