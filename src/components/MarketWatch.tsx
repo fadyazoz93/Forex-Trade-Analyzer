@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import {
   ArrowDownRight,
   ArrowUpRight,
-  BarChart3,
   Check,
   Compass,
   DollarSign,
@@ -35,7 +34,6 @@ interface MarketWatchProps {
   liveFeedStatus?: LiveFeedStatus;
   onSelectSymbol: (symbolId: string) => void;
   onInspectGann: (symbol: SymbolConfig) => void;
-  onOpenChart?: (symbol: SymbolConfig) => void;
   onUpdateCustomPrice?: (symbolId: string, price: number) => void;
   onForceSync?: () => void;
 }
@@ -52,7 +50,6 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
   liveFeedStatus,
   onSelectSymbol,
   onInspectGann,
-  onOpenChart,
   onUpdateCustomPrice,
   onForceSync,
 }) => {
@@ -618,34 +615,18 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
                 </div>
               )}
 
-              {/* Card Footer: Action Buttons */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/60">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onOpenChart) {
-                      onOpenChart(sym);
-                    } else {
-                      onInspectGann(sym);
-                    }
-                  }}
-                  className="min-h-[38px] py-1.5 px-2 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all border border-cyan-500/40 cursor-pointer shadow-sm shadow-cyan-500/10 active:scale-98"
-                  title="عرض شارت الشموع التفاعلي وتراكبات زوايا جان"
-                >
-                  <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>شارت الشموع</span>
-                </button>
-
+              {/* Card Footer: Action Button */}
+              <div className="pt-2 border-t border-slate-800/60">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onInspectGann(sym);
                   }}
-                  className="min-h-[38px] py-1.5 px-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer active:scale-98"
+                  className="w-full min-h-[38px] py-1.5 px-3 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-slate-700/80 cursor-pointer active:scale-98"
                   title="فاحص زوايا جان ومربع التسعة"
                 >
-                  <Compass className="w-3.5 h-3.5 text-amber-400" />
-                  <span>فاحص مربع 9</span>
+                  <Compass className="w-4 h-4 text-amber-400" />
+                  <span>فاحص زوايا جان ومربع 9</span>
                 </button>
               </div>
             </div>

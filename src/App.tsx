@@ -603,7 +603,6 @@ export default function App() {
           liveFeedStatus={liveFeedStatus}
           onSelectSymbol={setSelectedSymbolId}
           onInspectGann={(sym) => setInspectSymbol(sym)}
-          onOpenChart={(sym) => setChartSymbol(sym)}
           onUpdateCustomPrice={handleUpdateCustomPrice}
           onForceSync={forceSyncLivePrices}
         />
