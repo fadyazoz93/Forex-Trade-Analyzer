@@ -39,13 +39,56 @@ const AUTO_SEND: boolean = process.env.AUTO_SEND_TELEGRAM !== 'false'; // Always
 
 // In-Memory Storage for 24/7 Signals on Railway
 const serverSignals: TradeSignal[] = [];
-const sentSignalKeys = new Set<string>();
 let backgroundScansCount = 0;
 let lastScanTimestamp = Date.now();
 let serverStartTime = Date.now();
 
-// Generate unique key to prevent duplicate sends on the same price level
-const getSignalKey = (s: TradeSignal) => `${s.symbol}_${s.orderType}_${s.entryPrice.toFixed(2)}`;
+interface SignalCooldownEntry {
+  symbol: string;
+  orderType: string;
+  entryPrice: number;
+  timestamp: number;
+}
+
+// Cooldown tracker per symbol and direction to ensure continuous intraday signals while avoiding rapid spam
+const symbolSignalCooldowns = new Map<string, SignalCooldownEntry>();
+
+// Cooldown duration: 90 minutes for identical direction, or if price shifts by > 35 pips / $12
+const SIGNAL_COOLDOWN_MS = 90 * 60 * 1000;
+
+function canDispatchSignal(sig: TradeSignal): boolean {
+  const key = `${sig.symbol}_${sig.orderType}`;
+  const now = Date.now();
+  const lastEntry = symbolSignalCooldowns.get(key);
+
+  if (!lastEntry) {
+    return true;
+  }
+
+  // Allow after 90 minutes have elapsed
+  if (now - lastEntry.timestamp >= SIGNAL_COOLDOWN_MS) {
+    return true;
+  }
+
+  // Allow if market price moved significantly (> 35 pips on Forex, > $12 on Gold)
+  const isMetal = sig.symbol.includes('XAU') || sig.symbol.includes('XAG');
+  const pipDistance = isMetal ? 12.0 : 0.0035;
+  if (Math.abs(sig.entryPrice - lastEntry.entryPrice) >= pipDistance) {
+    return true;
+  }
+
+  return false;
+}
+
+function recordDispatchedSignal(sig: TradeSignal) {
+  const key = `${sig.symbol}_${sig.orderType}`;
+  symbolSignalCooldowns.set(key, {
+    symbol: sig.symbol,
+    orderType: sig.orderType,
+    entryPrice: sig.entryPrice,
+    timestamp: Date.now(),
+  });
+}
 
 /**
  * 24/7 Background Market Scanner & Telegram Auto-Dispatcher Worker
@@ -92,11 +135,9 @@ function start24x7BackgroundScanner() {
 
       if (signals.length > 0) {
         for (const sig of signals) {
-          const sigKey = getSignalKey(sig);
-
-          // If this is a newly discovered confluence signal
-          if (!sentSignalKeys.has(sigKey)) {
-            sentSignalKeys.add(sigKey);
+          // Check if this signal passes cooldown & price-distance deduplication
+          if (canDispatchSignal(sig)) {
+            recordDispatchedSignal(sig);
 
             // Add to in-memory active signals list
             serverSignals.unshift(sig);

@@ -13,6 +13,74 @@ interface SymbolCandleStore {
 const candleDatabase = new Map<string, SymbolCandleStore>();
 const latestTicks = new Map<string, MarketTick>();
 
+const TIMEFRAME_MS: Record<Timeframe, number> = {
+  M1: 60 * 1000,
+  M5: 5 * 60 * 1000,
+  M15: 15 * 60 * 1000,
+  H1: 60 * 60 * 1000,
+  H4: 4 * 60 * 60 * 1000,
+  D1: 24 * 60 * 60 * 1000,
+};
+
+/**
+ * Updates an individual timeframe candle array.
+ * If the timeframe duration has elapsed, it seals the previous candle and creates a new active candle.
+ * Otherwise, it updates the high, low, close, and volume of the active candle.
+ */
+function updateCandleWithRollover(
+  candles: Candle[],
+  price: number,
+  tf: Timeframe,
+  currentTime = Date.now()
+) {
+  if (!candles || candles.length === 0) return;
+  const stepMs = TIMEFRAME_MS[tf] || 60000;
+  const last = candles[candles.length - 1];
+
+  const candleStartTime = Math.floor(last.time / stepMs) * stepMs;
+  const currentBucket = Math.floor(currentTime / stepMs) * stepMs;
+
+  if (currentBucket > candleStartTime) {
+    // Current candle period has completed! Push a new active candle
+    const newCandle: Candle = {
+      time: currentBucket,
+      open: last.close,
+      high: Math.max(last.close, price),
+      low: Math.min(last.close, price),
+      close: price,
+      volume: 1,
+    };
+    candles.push(newCandle);
+    // Keep max 150 candles in memory to prevent unbounded array growth
+    if (candles.length > 150) {
+      candles.shift();
+    }
+  } else {
+    // Micro-update active candle
+    last.close = price;
+    if (price > last.high) last.high = price;
+    if (price < last.low) last.low = price;
+    last.volume += 1;
+  }
+}
+
+/**
+ * Updates all 6 timeframes (M1, M5, M15, H1, H4, D1) with time-based rollover
+ */
+export function updateAllCandlesForPrice(
+  store: SymbolCandleStore,
+  price: number,
+  currentTime = Date.now()
+) {
+  if (!store) return;
+  updateCandleWithRollover(store.M1, price, 'M1', currentTime);
+  updateCandleWithRollover(store.M5, price, 'M5', currentTime);
+  updateCandleWithRollover(store.M15, price, 'M15', currentTime);
+  updateCandleWithRollover(store.H1, price, 'H1', currentTime);
+  updateCandleWithRollover(store.H4, price, 'H4', currentTime);
+  updateCandleWithRollover(store.D1, price, 'D1', currentTime);
+}
+
 type TickSubscriber = (ticks: Record<string, MarketTick>, updatedSymbols: SymbolConfig[]) => void;
 const subscribers = new Set<TickSubscriber>();
 
@@ -263,13 +331,8 @@ function recalibrateCandlesToPrice(store: SymbolCandleStore, newPrice: number, p
       }
     });
   } else {
-    // Normal micro-update of the active candle
-    updateLatestCandle(store.M1, newPrice);
-    updateLatestCandle(store.M5, newPrice);
-    updateLatestCandle(store.M15, newPrice);
-    updateLatestCandle(store.H1, newPrice);
-    updateLatestCandle(store.H4, newPrice);
-    updateLatestCandle(store.D1, newPrice);
+    // Normal update of all timeframes with automatic rollover
+    updateAllCandlesForPrice(store, newPrice);
   }
 }
 
@@ -445,7 +508,7 @@ export function simulateMarketTick(symbolConfig: SymbolConfig): MarketTick {
   latestTicks.set(symbolConfig.id, tick);
 
   if (store) {
-    updateLatestCandle(store.M1, newMid);
+    updateAllCandlesForPrice(store, newMid);
   }
 
   return tick;
@@ -476,15 +539,6 @@ export function emitBatchMarketTicks(): { ticks: Record<string, MarketTick>; upd
   return { ticks: allTicks, updatedSymbols };
 }
 
-function updateLatestCandle(candles: Candle[], price: number) {
-  if (candles.length === 0) return;
-  const last = candles[candles.length - 1];
-  last.close = price;
-  if (price > last.high) last.high = price;
-  if (price < last.low) last.low = price;
-  last.volume += Math.floor(1 + Math.random() * 4);
-}
-
 /**
  * Calibrate or override price for a specific symbol (e.g. Gold XAU/USD)
  */
@@ -509,12 +563,7 @@ export function setCustomSymbolPrice(symbolId: string, newPrice: number): Market
   latestTicks.set(symbolId, tick);
 
   if (store) {
-    updateLatestCandle(store.M1, newPrice);
-    updateLatestCandle(store.M5, newPrice);
-    updateLatestCandle(store.M15, newPrice);
-    updateLatestCandle(store.H1, newPrice);
-    updateLatestCandle(store.H4, newPrice);
-    updateLatestCandle(store.D1, newPrice);
+    updateAllCandlesForPrice(store, newPrice);
   }
 
   const allTicks = getAllTicks();

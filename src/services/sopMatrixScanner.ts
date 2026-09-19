@@ -118,7 +118,7 @@ export function evaluateSopGates(
     : currentPrice <= expected1x1 + currentPrice * 0.002;
 
   const cycleOk = checkGannTimeCycle(barsElapsed, anchor.price || currentPrice);
-  const gate3Passed = anchor.found && priceNear1x1 && cycleOk;
+  const gate3Passed = anchor.found && (priceNear1x1 || cycleOk);
 
   const gate3: GateStatus = {
     passed: gate3Passed,
@@ -141,17 +141,18 @@ export function evaluateSopGates(
   };
 
   // --- GATE 5: Clean Execution (Volume Surge + Wick Rejection + Micro BOS) ---
-  const volOk = checkVolumeSurge(triggerCandles, 1.15);
+  const volOk = checkVolumeSurge(triggerCandles, 1.10);
   const lastCompletedBar = triggerCandles.length > 1 ? triggerCandles[triggerCandles.length - 2] : triggerCandles[0];
-  const paOk = lastCompletedBar ? checkCandleRejection(lastCompletedBar, isLong, 0.20) : true;
+  const paOk = lastCompletedBar ? checkCandleRejection(lastCompletedBar, isLong, 0.18) : true;
   const bosOk = checkMicroBOS(triggerCandles, isLong);
 
-  const gate5Passed = volOk && paOk && bosOk;
+  // Clean execution confirmed if structure breaks with volume or rejection wick (at least 2 confirmations)
+  const gate5Passed = (bosOk && (volOk || paOk)) || (volOk && paOk);
   const gate5: GateStatus = {
     passed: gate5Passed,
     name: 'Volume Surge, Wick Rejection & Micro BOS',
     nameAr: 'تأكيد السلوك السعري، الفوليوم وكسر الهيكل المصغر (Micro BOS)',
-    detail: `فوليوم متفوق: ${volOk ? 'نعم' : 'لا'} | ذيل رفض ≥20%: ${paOk ? 'نعم' : 'لا'} | كسر هيكل: ${bosOk ? 'نعم' : 'لا'}`,
+    detail: `فوليوم متفوق: ${volOk ? 'نعم' : 'لا'} | ذيل رفض: ${paOk ? 'نعم' : 'لا'} | كسر هيكل: ${bosOk ? 'نعم' : 'لا'}`,
     value: `${volOk ? '✓ Vol' : '✗ Vol'} | ${paOk ? '✓ Wick' : '✗ Wick'} | ${bosOk ? '✓ BOS' : '✗ BOS'}`,
   };
 
