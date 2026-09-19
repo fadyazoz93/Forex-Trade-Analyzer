@@ -26,6 +26,7 @@ import {
   isTrendSlopeHealthy,
 } from './indicators';
 import { getCandles, getLatestTick } from './marketDataFeed';
+import { isWeekendMarketClosed } from './shieldMonitor';
 
 export interface ScanOptions {
   engine?: EngineMode;
@@ -243,6 +244,11 @@ export function scanMarketWatchSymbols(
 
     candidates.push({ symbol: sym, evalLong, evalShort });
 
+    // Weekend Market Closure Shield: No live signals are ever generated when global markets are closed
+    if (isWeekendMarketClosed()) {
+      return;
+    }
+
     // Check if long triggers
     if (evalLong.passed && evalLong.score >= (options.scoreNeeded || 4)) {
       const liveEntryPrice = tick.ask;
@@ -335,6 +341,11 @@ export function evaluateSingleSymbolOnTick(
   const evalShort = evaluateSopGates(sym, 'intraday', false, currentTick);
 
   let newSignal: TradeSignal | null = null;
+
+  // If market is closed on weekend, do not generate live signals
+  if (isWeekendMarketClosed()) {
+    return { newSignal: null, evalLong, evalShort };
+  }
 
   if (evalLong.passed && evalLong.score >= scoreNeeded) {
     const liveEntryPrice = currentTick.ask;

@@ -26,7 +26,7 @@ import {
   subscribeToFeedStatus,
   subscribeToRealtimeTicks,
 } from './services/marketDataFeed';
-import { getShieldStatus } from './services/shieldMonitor';
+import { getShieldStatus, isWeekendMarketClosed } from './services/shieldMonitor';
 import {
   evaluateSingleSymbolOnTick,
   scanMarketWatchSymbols,
@@ -254,7 +254,9 @@ export default function App() {
 
     // Backup sweep scan every 6 seconds to ensure no confluence is left behind
     const sweepInterval = setInterval(() => {
-      handlePerformScan(engineRef.current, false);
+      if (!isWeekendMarketClosed()) {
+        handlePerformScan(engineRef.current, false);
+      }
     }, 6000);
 
     return () => {
@@ -269,6 +271,9 @@ export default function App() {
 
   // Handle newly caught instant signal on the tick
   const handleIncomingInstantSignal = (newSignal: TradeSignal) => {
+    // Shield: Do not process instant signals during weekend market closure
+    if (isWeekendMarketClosed()) return;
+
     // Avoid duplicate active signal on the exact same symbol and direction
     const alreadyActive = activeSignalsRef.current.some(
       (s) =>
@@ -317,6 +322,8 @@ export default function App() {
   const handlePerformScan = async (selectedEngine = engine, showSpinner = true) => {
     if (showSpinner) setIsScanning(true);
 
+    const isWeekendClosed = isWeekendMarketClosed();
+
     const { signals, candidates } = scanMarketWatchSymbols({
       engine: selectedEngine,
       scoreNeeded: 4,
@@ -330,6 +337,18 @@ export default function App() {
       };
     });
     setEvaluations(newEvals);
+
+    if (isWeekendClosed) {
+      if (showSpinner) {
+        setToast({
+          id: Date.now(),
+          message: '⛔ السوق المالي العالمي مغلق حالياً (عطلة نهاية الأسبوع من مساء الجمعة إلى مساء الأحد). تم إيقاف توليد الإشارات لحماية الحساب.',
+          type: 'sell',
+        });
+      }
+      if (showSpinner) setIsScanning(false);
+      return;
+    }
 
     // If signals discovered
     if (signals.length > 0) {
@@ -378,6 +397,15 @@ export default function App() {
 
   // Dispatch Signal to Telegram
   const handleSendTelegramSignal = async (signal: TradeSignal) => {
+    if (isWeekendMarketClosed()) {
+      setToast({
+        id: Date.now(),
+        message: '⛔ السوق مغلق حالياً (عطلة نهاية الأسبوع). تم حظر الإرسال إلى تليجرام لحماية رأس المال.',
+        type: 'sell',
+      });
+      return;
+    }
+
     setIsSendingTelegram(true);
 
     const cfg = telegramConfigRef.current;

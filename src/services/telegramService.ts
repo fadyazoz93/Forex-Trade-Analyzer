@@ -1,4 +1,5 @@
 import { TradeSignal } from '../types';
+import { isWeekendMarketClosed } from './shieldMonitor';
 
 export const DEFAULT_TELEGRAM_TOKEN = '8676995594:AAGUvAV4X8P_pwk0NbIKHEWMyZ7NgbktjOc';
 export const DEFAULT_TELEGRAM_CHANNEL_ID = '-1004433974736';
@@ -167,8 +168,17 @@ export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true)
 export async function sendTradeSignalToTelegram(
   signal: TradeSignal,
   token: string = DEFAULT_TELEGRAM_TOKEN,
-  targetIds: string[] | string = [DEFAULT_TELEGRAM_CHANNEL_ID, DEFAULT_TELEGRAM_CHAT_ID]
+  targetIds: string[] | string = [DEFAULT_TELEGRAM_CHANNEL_ID, DEFAULT_TELEGRAM_CHAT_ID],
+  forceOverrideWeekend: boolean = false
 ): Promise<TelegramSendResult> {
+  if (!forceOverrideWeekend && isWeekendMarketClosed()) {
+    console.warn('⛔ [Telegram Shield] Blocked sending signal to Telegram: Weekend market closure is active.');
+    return {
+      success: false,
+      error: 'تم حظر الإرسال: السوق المالي العالمي مغلق حالياً (عطلة نهاية الأسبوع من مساء الجمعة حتى مساء الأحد)',
+    };
+  }
+
   const msg = formatSignalTelegramMessage(signal, true);
   return sendTelegramMultiTarget(token, targetIds, msg);
 }
