@@ -65,8 +65,8 @@ interface SignalCooldownEntry {
 // Cooldown tracker per symbol to ensure continuous intraday signals while avoiding rapid spam or flipping
 const symbolSignalCooldowns = new Map<string, SignalCooldownEntry>();
 
-// Cooldown duration: 45 minutes minimum between new signals for the SAME symbol
-const SIGNAL_COOLDOWN_MS = 45 * 60 * 1000;
+// Cooldown duration: 60 minutes minimum between any signals for the SAME symbol (prevents rapid flipping/whipsaw)
+const SIGNAL_COOLDOWN_MS = 60 * 60 * 1000;
 
 function normalizeServerSymbol(sym: string): string {
   return sym.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
@@ -205,6 +205,8 @@ function trackActiveSignalsLifeCycle() {
     if ((updated.status as string) === 'SL_HIT' && !events.has('SL')) {
       events.add('SL');
       console.log(`🛑 [Railway 24/7 Worker] Stop Loss Hit for ${sig.symbol}. Broadcasting transparency update to Telegram...`);
+      // Enforce post-SL cooldown: reset cooldown timestamp so no new trade can open on this currency immediately
+      recordDispatchedSignal(sig);
       saveTradeSignalToDb(sig).catch(() => {});
       if (AUTO_SEND) {
         sendStopLossHitToTelegram(sig, sig.livePips || 0, BOT_TOKEN, [CHANNEL_ID]).catch((err) =>

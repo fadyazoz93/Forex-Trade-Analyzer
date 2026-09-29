@@ -372,8 +372,8 @@ export function formatBreakevenTelegramMessage(signal: TradeSignal, forHtml = tr
 // Track dispatched signals per symbol with timestamps to prevent duplicate messages for the same currency at the same time
 const symbolLastDispatchedTime = new Map<string, number>();
 
-// Minimum interval between new signal messages for the SAME symbol (30 minutes)
-export const SAME_SYMBOL_COOLDOWN_MS = 30 * 60 * 1000;
+// Minimum interval between new signal messages for the SAME symbol (60 minutes cooldown to prevent rapid whipsaws/flipping)
+export const SAME_SYMBOL_COOLDOWN_MS = 60 * 60 * 1000;
 
 export function normalizeSymbolKey(sym: string): string {
   return sym.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
