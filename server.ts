@@ -7,6 +7,8 @@ import {
   emitBatchMarketTicks,
   fetchLiveExchangeRates,
   forceSyncLivePrices,
+  syncAllRealMarketData,
+  getAllCandleStores,
   getAllTicks,
 } from './src/services/marketDataFeed';
 import { scanMarketWatchSymbols } from './src/services/sopMatrixScanner';
@@ -50,30 +52,30 @@ interface SignalCooldownEntry {
   timestamp: number;
 }
 
-// Cooldown tracker per symbol and direction to ensure continuous intraday signals while avoiding rapid spam
+// Cooldown tracker per symbol to ensure continuous intraday signals while avoiding rapid spam or flipping
 const symbolSignalCooldowns = new Map<string, SignalCooldownEntry>();
 
-// Cooldown duration: 90 minutes for identical direction, or if price shifts by > 35 pips / $12
-const SIGNAL_COOLDOWN_MS = 90 * 60 * 1000;
+// Cooldown duration: 60 minutes per symbol, or if price shifts by > 40 pips / $15
+const SIGNAL_COOLDOWN_MS = 60 * 60 * 1000;
 
 function canDispatchSignal(sig: TradeSignal): boolean {
-  const key = `${sig.symbol}_${sig.orderType}`;
+  const symKey = sig.symbol;
   const now = Date.now();
-  const lastEntry = symbolSignalCooldowns.get(key);
+  const lastEntry = symbolSignalCooldowns.get(symKey);
 
   if (!lastEntry) {
     return true;
   }
 
-  // Allow after 90 minutes have elapsed
+  // Allow after cooldown has elapsed
   if (now - lastEntry.timestamp >= SIGNAL_COOLDOWN_MS) {
     return true;
   }
 
-  // Allow if market price moved significantly (> 35 pips on Forex, > $12 on Gold)
+  // Allow if same direction and price moved significantly (> 40 pips on Forex, > $15 on Gold)
   const isMetal = sig.symbol.includes('XAU') || sig.symbol.includes('XAG');
-  const pipDistance = isMetal ? 12.0 : 0.0035;
-  if (Math.abs(sig.entryPrice - lastEntry.entryPrice) >= pipDistance) {
+  const pipDistance = isMetal ? 15.0 : 0.0040;
+  if (sig.orderType === lastEntry.orderType && Math.abs(sig.entryPrice - lastEntry.entryPrice) >= pipDistance) {
     return true;
   }
 
@@ -81,8 +83,8 @@ function canDispatchSignal(sig: TradeSignal): boolean {
 }
 
 function recordDispatchedSignal(sig: TradeSignal) {
-  const key = `${sig.symbol}_${sig.orderType}`;
-  symbolSignalCooldowns.set(key, {
+  const symKey = sig.symbol;
+  symbolSignalCooldowns.set(symKey, {
     symbol: sig.symbol,
     orderType: sig.orderType,
     entryPrice: sig.entryPrice,
@@ -94,19 +96,22 @@ function recordDispatchedSignal(sig: TradeSignal) {
  * 24/7 Background Market Scanner & Telegram Auto-Dispatcher Worker
  * Runs continuously on the server regardless of whether any browser is open.
  */
-function start24x7BackgroundScanner() {
+async function start24x7BackgroundScanner() {
   console.log('🚀 [Railway 24/7 Worker] Starting 24/7 Background Strategy Scanner...');
   console.log(`📡 Telegram Channel: ${CHANNEL_ID} | Auto-Send: ${AUTO_SEND}`);
 
-  // Initialize market data and immediately sync genuine interbank prices
+  // Initialize market data and immediately sync genuine interbank prices & candles
   initializeMarketData();
-  forceSyncLivePrices()
-    .then(() => console.log('✅ [Market Data] Initial real-time market prices synchronized.'))
-    .catch((err) => console.warn('⚠️ [Market Data] Initial price sync error:', err));
+  try {
+    await syncAllRealMarketData();
+    console.log('✅ [Market Data] Initial real-time market prices & candles synchronized.');
+  } catch (err) {
+    console.warn('⚠️ [Market Data] Initial price sync error:', err);
+  }
 
-  // Sync genuine live exchange rates & precious metals spot every 30 seconds
+  // Periodic real market candles sync every 30 seconds
   setInterval(() => {
-    forceSyncLivePrices().catch((err) => console.warn('⚠️ [Market Data] Live sync error:', err));
+    syncAllRealMarketData().catch((err) => console.warn('⚠️ [Market Data] Periodic sync error:', err));
   }, 30000);
 
   // Micro-fluctuation loop every 3 seconds for realistic active chart ticking
@@ -206,13 +211,35 @@ app.get('/api/market-data', (req, res) => {
 
 // Trigger immediate market price refresh from live feeds
 app.post('/api/market-data/sync', async (req, res) => {
-  await forceSyncLivePrices();
+  await syncAllRealMarketData();
   const ticks = getAllTicks();
   res.json({
     success: true,
     ticks,
     timestamp: Date.now(),
     isWeekendClosed: isWeekendMarketClosed(),
+  });
+});
+
+// Real-time market multi-timeframe candles endpoint (serves real market candles to frontend without CORS)
+app.get('/api/market-candles', (req, res) => {
+  const stores = getAllCandleStores();
+  res.json({
+    success: true,
+    stores,
+    timestamp: Date.now(),
+  });
+});
+
+// Single symbol real candles endpoint
+app.get('/api/market-candles/:id', (req, res) => {
+  const stores = getAllCandleStores();
+  const symbolId = req.params.id;
+  res.json({
+    success: true,
+    symbolId,
+    store: stores[symbolId] || null,
+    timestamp: Date.now(),
   });
 });
 

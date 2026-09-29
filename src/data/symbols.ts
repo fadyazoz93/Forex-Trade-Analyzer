@@ -1,22 +1,53 @@
 import { SymbolConfig } from '../types';
 
 /**
- * Top 10 Currency Pairs + Gold (XAU/USD) and Silver (XAG/USD)
- * Exactly as requested:
- * 1. EUR/USD
- * 2. GBP/USD
- * 3. USD/JPY
- * 4. USD/CHF
- * 5. AUD/USD
- * 6. USD/CAD
- * 7. NZD/USD
- * 8. EUR/GBP
- * 9. EUR/JPY
- * 10. GBP/JPY
- * 11. XAU/USD (Gold)
- * 12. XAG/USD (Silver)
+ * المحفظة النخبوية المركزة (Elite 4 Setup)
+ * تم تصفيتها بعناية استناداً إلى هندسة جان (Gann Angles & Sq9) وقواعد وايكوف المؤسسية (Wyckoff Volume & Phases):
+ * 1. XAU/USD (الذهب) - ملك مربع التسعة والدورات السعرية والزمنية
+ * 2. GBP/JPY (الباوند ين) - ملك السرعة والزخم الحركي لزوايا جان
+ * 3. EUR/USD (اليورو دولار) - ملك السيولة العالمية ونماذج وايكوف الكلاسيكية
+ * 4. USD/JPY (الدولار ين) - صاحب الاتجاهات الكلية المستمرة ونماذج الماكرو
  */
 export const TARGET_SYMBOLS: SymbolConfig[] = [
+  {
+    id: 'XAUUSD',
+    symbol: 'XAU/USD',
+    nameAr: 'الذهب / الدولار الأمريكي',
+    nameEn: 'Gold / US Dollar',
+    category: 'metal',
+    baseCurrency: 'XAU',
+    quoteCurrency: 'USD',
+    digits: 2,
+    point: 0.01,
+    typicalSpreadPts: 30,
+    initialPrice: 4174.00,
+    volatilityAtr: 42.50,
+    minLot: 0.01,
+    maxLot: 5.0,
+    lotStep: 0.01,
+    tickValue: 1.0,
+    tickSize: 0.01,
+    metalsReduction: 0.30, // 30% lot reduction rule
+  },
+  {
+    id: 'GBPJPY',
+    symbol: 'GBP/JPY',
+    nameAr: 'الجنيه الإسترليني / الين الياباني',
+    nameEn: 'British Pound / Japanese Yen',
+    category: 'forex',
+    baseCurrency: 'GBP',
+    quoteCurrency: 'JPY',
+    digits: 3,
+    point: 0.001,
+    typicalSpreadPts: 22,
+    initialPrice: 208.250,
+    volatilityAtr: 1.680,
+    minLot: 0.01,
+    maxLot: 10.0,
+    lotStep: 0.01,
+    tickValue: 6.60,
+    tickSize: 0.001,
+  },
   {
     id: 'EURUSD',
     symbol: 'EUR/USD',
@@ -28,27 +59,8 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     digits: 5,
     point: 0.00001,
     typicalSpreadPts: 12,
-    initialPrice: 1.16030,
+    initialPrice: 1.13430,
     volatilityAtr: 0.00680,
-    minLot: 0.01,
-    maxLot: 10.0,
-    lotStep: 0.01,
-    tickValue: 10.0,
-    tickSize: 0.00001,
-  },
-  {
-    id: 'GBPUSD',
-    symbol: 'GBP/USD',
-    nameAr: 'الجنيه الإسترليني / الدولار الأمريكي',
-    nameEn: 'British Pound / US Dollar',
-    category: 'forex',
-    baseCurrency: 'GBP',
-    quoteCurrency: 'USD',
-    digits: 5,
-    point: 0.00001,
-    typicalSpreadPts: 15,
-    initialPrice: 1.35240,
-    volatilityAtr: 0.00860,
     minLot: 0.01,
     maxLot: 10.0,
     lotStep: 0.01,
@@ -66,13 +78,59 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     digits: 3,
     point: 0.001,
     typicalSpreadPts: 14,
-    initialPrice: 153.800,
+    initialPrice: 157.400,
     volatilityAtr: 1.180,
     minLot: 0.01,
     maxLot: 10.0,
     lotStep: 0.01,
     tickValue: 6.60,
     tickSize: 0.001,
+  },
+];
+
+/**
+ * الأصول الإضافية المحفوظة في الأرشيف (في حال الرغبة في التوسعة لاحقاً)
+ */
+export const ARCHIVED_SYMBOLS: SymbolConfig[] = [
+  {
+    id: 'GBPUSD',
+    symbol: 'GBP/USD',
+    nameAr: 'الجنيه الإسترليني / الدولار الأمريكي',
+    nameEn: 'British Pound / US Dollar',
+    category: 'forex',
+    baseCurrency: 'GBP',
+    quoteCurrency: 'USD',
+    digits: 5,
+    point: 0.00001,
+    typicalSpreadPts: 15,
+    initialPrice: 1.32300,
+    volatilityAtr: 0.00860,
+    minLot: 0.01,
+    maxLot: 10.0,
+    lotStep: 0.01,
+    tickValue: 10.0,
+    tickSize: 0.00001,
+  },
+  {
+    id: 'XAGUSD',
+    symbol: 'XAG/USD',
+    nameAr: 'الفضة / الدولار الأمريكي',
+    nameEn: 'Silver / US Dollar',
+    category: 'metal',
+    baseCurrency: 'XAG',
+    quoteCurrency: 'USD',
+    digits: 3,
+    point: 0.001,
+    typicalSpreadPts: 35,
+    initialPrice: 61.000,
+    volatilityAtr: 1.250,
+    minLot: 0.01,
+    maxLot: 5.0,
+    lotStep: 0.01,
+    tickValue: 5.0,
+    tickSize: 0.001,
+    metalsReduction: 0.30,
+    minSLPoints: 500,
   },
   {
     id: 'USDCHF',
@@ -85,7 +143,7 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     digits: 5,
     point: 0.00001,
     typicalSpreadPts: 16,
-    initialPrice: 0.81600,
+    initialPrice: 0.83440,
     volatilityAtr: 0.00560,
     minLot: 0.01,
     maxLot: 10.0,
@@ -104,7 +162,7 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     digits: 5,
     point: 0.00001,
     typicalSpreadPts: 14,
-    initialPrice: 0.71680,
+    initialPrice: 0.69900,
     volatilityAtr: 0.00580,
     minLot: 0.01,
     maxLot: 10.0,
@@ -123,7 +181,7 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     digits: 5,
     point: 0.00001,
     typicalSpreadPts: 16,
-    initialPrice: 1.38580,
+    initialPrice: 1.41940,
     volatilityAtr: 0.00620,
     minLot: 0.01,
     maxLot: 10.0,
@@ -142,7 +200,7 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     digits: 5,
     point: 0.00001,
     typicalSpreadPts: 18,
-    initialPrice: 0.58160,
+    initialPrice: 0.56500,
     volatilityAtr: 0.00510,
     minLot: 0.01,
     maxLot: 10.0,
@@ -161,7 +219,7 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     digits: 5,
     point: 0.00001,
     typicalSpreadPts: 16,
-    initialPrice: 0.85800,
+    initialPrice: 0.85710,
     volatilityAtr: 0.00420,
     minLot: 0.01,
     maxLot: 10.0,
@@ -180,7 +238,7 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     digits: 3,
     point: 0.001,
     typicalSpreadPts: 18,
-    initialPrice: 178.450,
+    initialPrice: 178.500,
     volatilityAtr: 1.350,
     minLot: 0.01,
     maxLot: 10.0,
@@ -188,64 +246,4 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     tickValue: 6.60,
     tickSize: 0.001,
   },
-  {
-    id: 'GBPJPY',
-    symbol: 'GBP/JPY',
-    nameAr: 'الجنيه الإسترليني / الين الياباني',
-    nameEn: 'British Pound / Japanese Yen',
-    category: 'forex',
-    baseCurrency: 'GBP',
-    quoteCurrency: 'JPY',
-    digits: 3,
-    point: 0.001,
-    typicalSpreadPts: 22,
-    initialPrice: 207.990,
-    volatilityAtr: 1.680,
-    minLot: 0.01,
-    maxLot: 10.0,
-    lotStep: 0.01,
-    tickValue: 6.60,
-    tickSize: 0.001,
-  },
-  {
-    id: 'XAUUSD',
-    symbol: 'XAU/USD',
-    nameAr: 'الذهب / الدولار الأمريكي',
-    nameEn: 'Gold / US Dollar',
-    category: 'metal',
-    baseCurrency: 'XAU',
-    quoteCurrency: 'USD',
-    digits: 2,
-    point: 0.01,
-    typicalSpreadPts: 30,
-    initialPrice: 4349.70,
-    volatilityAtr: 42.50,
-    minLot: 0.01,
-    maxLot: 5.0,
-    lotStep: 0.01,
-    tickValue: 1.0,
-    tickSize: 0.01,
-    metalsReduction: 0.30, // 30% lot reduction rule
-  },
-  {
-    id: 'XAGUSD',
-    symbol: 'XAG/USD',
-    nameAr: 'الفضة / الدولار الأمريكي',
-    nameEn: 'Silver / US Dollar',
-    category: 'metal',
-    baseCurrency: 'XAG',
-    quoteCurrency: 'USD',
-    digits: 3,
-    point: 0.001,
-    typicalSpreadPts: 35,
-    initialPrice: 64.620,
-    volatilityAtr: 1.250,
-    minLot: 0.01,
-    maxLot: 5.0,
-    lotStep: 0.01,
-    tickValue: 5.0,
-    tickSize: 0.001,
-    metalsReduction: 0.30,
-    minSLPoints: 500, // 500 points (50 cents) minimum SL floor for silver
-  }
 ];

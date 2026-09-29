@@ -182,8 +182,8 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
           <h2 className="text-sm sm:text-base font-extrabold text-white">
             مراقبة السوق اللحظية (Market Watch)
           </h2>
-          <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-mono">
-            12 أصلاً
+          <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-cyan-950/60 text-cyan-300 border border-cyan-800 font-mono font-bold">
+            {symbols.length} أصول نخبوية (جان & وايكوف)
           </span>
         </div>
         <div className="text-[11px] sm:text-xs text-slate-400">

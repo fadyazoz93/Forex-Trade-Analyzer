@@ -22,6 +22,7 @@ import {
   getAllTicks,
   getLiveFeedStatus,
   initializeMarketData,
+  populateCandleStoresFromRemote,
   setCustomSymbolPrice,
   subscribeToFeedStatus,
   subscribeToRealtimeTicks,
@@ -153,22 +154,31 @@ export default function App() {
   // 1. Initialize Market Data on Mount & Subscribe to High-Frequency Real-time Stream
   useEffect(() => {
     initializeMarketData();
-    forceSyncLivePrices().catch(() => {});
     setTicks(getAllTicks());
     setShieldStatus(getShieldStatus());
 
-    // Fetch initial server ticks if running in fullstack container
+    // Fetch initial server ticks and real candles if running in fullstack container
+    fetch('/api/market/candles')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success && data.stores) {
+          populateCandleStoresFromRemote(data.stores);
+        }
+      })
+      .catch(() => {});
+
     fetch('/api/market-data')
       .then((res) => res.json())
       .then((data) => {
         if (data && data.ticks) {
           setTicks(data.ticks);
         }
+        // Run initial scan once ticks and candles are loaded
+        handlePerformScan(engineRef.current, false);
       })
-      .catch(() => {});
-
-    // Initial instant scan
-    handlePerformScan(engineRef.current);
+      .catch(() => {
+        handlePerformScan(engineRef.current, false);
+      });
 
     // Initial load of persistent signals from Turso database
     fetch('/api/database/signals?limit=30')
@@ -321,7 +331,7 @@ export default function App() {
     }).catch((err) => console.warn('Database save error:', err));
   };
 
-  // Perform SOP Strategy Scan on all 12 assets
+  // Perform SOP Strategy Scan on Elite Gann & Wyckoff Assets (XAU/USD, GBP/JPY, EUR/USD, USD/JPY)
   const handlePerformScan = async (selectedEngine = engine, showSpinner = true) => {
     if (showSpinner) setIsScanning(true);
 
