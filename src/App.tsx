@@ -283,6 +283,9 @@ export default function App() {
     );
     if (alreadyActive) return;
 
+    // Immediately update ref to prevent synchronous race condition from subsequent ticks
+    activeSignalsRef.current = [newSignal, ...activeSignalsRef.current];
+
     // Play audio notification chime
     playSignalAlertSound(newSignal.orderType.includes('BUY'));
 
