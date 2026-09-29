@@ -91,8 +91,8 @@ export const TelegramModal: React.FC<TelegramModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md">
-      <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-xl max-h-[92vh] overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md">
+      <div className="bg-slate-900 border border-slate-700 rounded-t-3xl sm:rounded-3xl w-full max-w-xl max-h-[92vh] overflow-y-auto shadow-2xl">
         {/* Modal Header */}
         <div className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-800 p-4 sm:p-5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
@@ -237,18 +237,21 @@ export const TelegramModal: React.FC<TelegramModalProps> = ({
             <div className="flex items-center justify-between text-xs text-slate-300 font-bold">
               <span className="flex items-center gap-1.5 text-cyan-300">
                 <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                <span>شكل الرسالة المعتمد على القناة (مع الهدف الموحد TP4):</span>
+                <span>نموذج الرسالة المختصر والواضح:</span>
               </span>
-              <span className="text-[10px] text-slate-400 font-normal">قالب الرسالة المباشرة</span>
+              <span className="text-[10px] text-emerald-400 font-normal">قالب بسيط وسريع</span>
             </div>
             <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800/80 font-mono text-xs text-slate-200 space-y-1 select-all leading-relaxed">
-              <div className="text-emerald-400 font-bold">📈 🟢 إشارة شراء مؤكدة (BUY)</div>
-              <div className="text-slate-600">════════════════════</div>
-              <div>🪙 العملة / الزوج: <span className="text-white font-bold">XAUUSD</span></div>
-              <div>💵 السعر الحالي: <span className="text-cyan-300 font-bold">$2658.40</span></div>
-              <div>🎯 سعر الدخول المقترح: <span className="text-white font-bold">$2650.00</span></div>
-              <div>🎯 الهدف الموحد (TP): <span className="text-emerald-300 font-bold">$2675.00</span> <span className="text-[10px] text-slate-400 font-sans">(الهدف الأخير TP4)</span></div>
-              <div>🛑 وقف الخسارة (SL): <span className="text-rose-400 font-bold">$2640.00</span></div>
+              <div className="text-emerald-400 font-bold">⚡ BUY 🟢: XAU/USD</div>
+              <div className="text-slate-600">─────────────────</div>
+              <div>🔹 الدخول: <span className="text-cyan-300 font-bold">$2650.00</span></div>
+              <div>🎯 الهدف 1: <span className="text-white font-bold">$2658.00</span> (+80p)</div>
+              <div>🎯 الهدف 2: <span className="text-white font-bold">$2666.00</span> (+160p)</div>
+              <div>🎯 الهدف 3: <span className="text-white font-bold">$2674.00</span> (+240p)</div>
+              <div>🎯 الهدف 4: <span className="text-white font-bold">$2682.00</span> (+320p)</div>
+              <div>🛑 الوقف: <span className="text-rose-400 font-bold">$2634.00</span> (-160p)</div>
+              <div className="text-slate-600">─────────────────</div>
+              <div className="text-slate-400 text-[11px]">🔒 تأمين الدخول (BE) فور تحقق الهدف 1</div>
             </div>
           </div>
 

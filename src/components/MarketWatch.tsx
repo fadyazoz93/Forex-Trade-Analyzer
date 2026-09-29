@@ -96,9 +96,9 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
         if (statusFilter === 'perfect5') {
           if (!bestEval || bestEval.score < 5) return false;
         } else if (statusFilter === 'buy') {
-          if (!bestEval || bestEval.direction !== 'BUY' || !bestEval.gate1_macroAndEma.passed) return false;
+          if (!bestEval || bestEval.direction !== 'BUY' || !bestEval.gate1_macroAndEma?.passed) return false;
         } else if (statusFilter === 'sell') {
-          if (!bestEval || bestEval.direction !== 'SELL' || !bestEval.gate1_macroAndEma.passed) return false;
+          if (!bestEval || bestEval.direction !== 'SELL' || !bestEval.gate1_macroAndEma?.passed) return false;
         } else if (statusFilter === 'watch') {
           if (!bestEval || bestEval.score < 3) return false;
         }
@@ -218,12 +218,17 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
             <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-3 bg-slate-950/70 border border-slate-800 px-2.5 sm:px-3 py-1.5 rounded-lg w-full sm:w-auto">
               <div className="flex items-center gap-1 text-amber-400 text-[11px]">
                 <span className="text-[10px] text-slate-400 font-sans">الذهب:</span>
-                <span className="font-bold">${liveFeedStatus.goldSpot.toFixed(2)}</span>
+                <span className="font-bold">${ticks['XAUUSD']?.bid ? ticks['XAUUSD'].bid.toFixed(2) : liveFeedStatus.goldSpot.toFixed(2)}</span>
               </div>
               <span className="text-slate-700">|</span>
-              <div className="flex items-center gap-1 text-slate-200 text-[11px]">
-                <span className="text-[10px] text-slate-400 font-sans">الفضة:</span>
-                <span className="font-bold">${liveFeedStatus.silverSpot.toFixed(2)}</span>
+              <div className="flex items-center gap-1 text-rose-400 text-[11px]">
+                <span className="text-[10px] text-slate-400 font-sans">GBPJPY:</span>
+                <span className="font-bold">{ticks['GBPJPY']?.bid ? ticks['GBPJPY'].bid.toFixed(3) : '208.250'}</span>
+              </div>
+              <span className="text-slate-700">|</span>
+              <div className="flex items-center gap-1 text-blue-400 text-[11px]">
+                <span className="text-[10px] text-slate-400 font-sans">EURUSD:</span>
+                <span className="font-bold">{ticks['EURUSD']?.bid ? ticks['EURUSD'].bid.toFixed(5) : '1.13400'}</span>
               </div>
               <span className="text-slate-700">|</span>
               <div className="flex items-center gap-1 text-cyan-400 text-[11px]">
@@ -314,7 +319,7 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
                   : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
-              الرئيسية (7)
+              الرئيسية ({symbols.filter((s) => MAJOR_IDS.has(s.id)).length})
             </button>
             <button
               onClick={() => setCategoryFilter('crosses')}
@@ -324,7 +329,7 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
                   : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
-              التقاطعات (3)
+              التقاطعات والزخم ({symbols.filter((s) => CROSS_IDS.has(s.id)).length})
             </button>
             <button
               onClick={() => setCategoryFilter('metals')}
@@ -334,7 +339,7 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
                   : 'bg-slate-900 text-amber-300/80 hover:text-amber-200 border border-slate-800'
               }`}
             >
-              المعادن (2)
+              المعادن والذهب ({symbols.filter((s) => METAL_IDS.has(s.id)).length})
             </button>
           </div>
 
@@ -428,7 +433,7 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
                 : evals.evalShort
               : null;
 
-            const hasSignal = bestEval && bestEval.score >= 4 && bestEval.gate1_macroAndEma.passed;
+            const hasSignal = Boolean(bestEval && bestEval.score >= 4 && bestEval.gate1_macroAndEma?.passed);
           const isLong = bestEval ? bestEval.direction === 'BUY' : true;
           const isMetal = sym.category === 'metal';
           const isGold = sym.id === 'XAUUSD';
@@ -498,15 +503,15 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
                   {bestEval && (
                     <div
                       className={`px-1.5 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 ${
-                        bestEval.gate1_macroAndEma.passed
+                        bestEval.gate1_macroAndEma?.passed
                           ? isLong
                             ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                             : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
                           : 'bg-slate-800 text-slate-400 border-slate-700'
                       }`}
-                      title={bestEval.gate1_macroAndEma.detail}
+                      title={bestEval.gate1_macroAndEma?.detail || ''}
                     >
-                      {bestEval.gate1_macroAndEma.passed ? (
+                      {bestEval.gate1_macroAndEma?.passed ? (
                         isLong ? (
                           <>
                             <TrendingUp className="w-2.5 h-2.5" />
@@ -583,31 +588,31 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
                   <div className="grid grid-cols-5 gap-1">
                     <div
                       className={`h-1.5 rounded-full ${
-                        bestEval.gate1_macroAndEma.passed ? 'bg-emerald-400' : 'bg-slate-800'
+                        bestEval.gate1_macroAndEma?.passed ? 'bg-emerald-400' : 'bg-slate-800'
                       }`}
                       title="البوابة 1: الاتجاه الكلي اليومي و200 EMA"
                     />
                     <div
                       className={`h-1.5 rounded-full ${
-                        bestEval.gate2_gannSq9.passed ? 'bg-cyan-400' : 'bg-slate-800'
+                        bestEval.gate2_gannSq9?.passed ? 'bg-cyan-400' : 'bg-slate-800'
                       }`}
                       title="البوابة 2: توافق زوايا مربع التسعة لجان"
                     />
                     <div
                       className={`h-1.5 rounded-full ${
-                        bestEval.gate3_gann1x1AndCycles.passed ? 'bg-blue-400' : 'bg-slate-800'
+                        bestEval.gate3_gann1x1AndCycles?.passed ? 'bg-blue-400' : 'bg-slate-800'
                       }`}
                       title="البوابة 3: زاوية 1x1 ودورات جان التوافقية"
                     />
                     <div
                       className={`h-1.5 rounded-full ${
-                        bestEval.gate4_rsi.passed ? 'bg-purple-400' : 'bg-slate-800'
+                        bestEval.gate4_rsi?.passed ? 'bg-purple-400' : 'bg-slate-800'
                       }`}
                       title="البوابة 4: فلتر زخم RSI النظيف"
                     />
                     <div
                       className={`h-1.5 rounded-full ${
-                        bestEval.gate5_priceActionAndBos.passed ? 'bg-amber-400' : 'bg-slate-800'
+                        bestEval.gate5_priceActionAndBos?.passed ? 'bg-amber-400' : 'bg-slate-800'
                       }`}
                       title="البوابة 5: ذيل الرفض والفوليوم وMicro BOS"
                     />

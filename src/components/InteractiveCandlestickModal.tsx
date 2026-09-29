@@ -195,11 +195,11 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-hidden sm:overflow-y-auto">
       <div
         ref={containerRef}
-        className={`bg-slate-900 border border-slate-700 rounded-3xl w-full flex flex-col shadow-2xl transition-all ${
-          isFullscreen ? 'max-w-full h-full rounded-none' : 'max-w-6xl max-h-[94vh]'
+        className={`bg-slate-900 border-0 sm:border border-slate-700 rounded-none sm:rounded-3xl w-full flex flex-col shadow-2xl transition-all h-[100dvh] sm:h-auto ${
+          isFullscreen ? 'max-w-full h-full rounded-none' : 'max-w-6xl sm:max-h-[94vh]'
         }`}
       >
         {/* Modal Top Bar */}
@@ -924,16 +924,16 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
                 </span>
 
                 <span className="text-slate-400 font-sans hidden md:inline">
-                  • ماكرو D1: {activeEval.gate1_macroAndEma.passed ? '✓ اجتاز' : '✗ مخالف'}
+                  • ماكرو D1: {activeEval.gate1_macroAndEma?.passed ? '✓ اجتاز' : '✗ مخالف'}
                 </span>
                 <span className="text-slate-400 font-sans hidden md:inline">
-                  • مربع 9: {activeEval.gate2_sq9Confluence.passed ? '✓ متوافق' : '✗ غير متوافق'}
+                  • مربع 9: {activeEval.gate2_gannSq9?.passed ? '✓ متوافق' : '✗ غير متوافق'}
                 </span>
                 <span className="text-slate-400 font-sans hidden md:inline">
-                  • زاوية 1x1: {activeEval.gate3_dynamicSlope.passed ? '✓ سليمة' : '✗ خارجها'}
+                  • زاوية 1x1: {activeEval.gate3_gann1x1AndCycles?.passed ? '✓ سليمة' : '✗ خارجها'}
                 </span>
                 <span className="text-slate-400 font-sans hidden md:inline">
-                  • M5 BOS: {activeEval.gate5_microBos.passed ? '✓ تحقق' : '✗ لم يتحقق'}
+                  • كسر الهيكل: {activeEval.gate5_priceActionAndBos?.passed ? '✓ تحقق' : '✗ لم يتحقق'}
                 </span>
               </div>
             ) : (

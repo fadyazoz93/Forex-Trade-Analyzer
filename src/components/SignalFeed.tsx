@@ -21,7 +21,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { TradeSignal } from '../types';
-import { formatSignalTelegramMessage } from '../services/telegramService';
+import { formatSignalTelegramMessage, calculatePipsDifference } from '../services/telegramService';
 
 interface SignalFeedProps {
   signals: TradeSignal[];
@@ -47,6 +47,8 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedGatesId, setExpandedGatesId] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [updateSendingKey, setUpdateSendingKey] = useState<string | null>(null);
+  const [feedTab, setFeedTab] = useState<'all' | 'active' | 'targets_hit' | 'closed'>('all');
 
   const handleCopy = (signal: TradeSignal) => {
     const text = formatSignalTelegramMessage(signal, false);
@@ -61,6 +63,37 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
     setSendingId(null);
   };
 
+  const handleSendTargetUpdate = async (signal: TradeSignal, updateType: string) => {
+    const key = `${signal.id}_${updateType}`;
+    setUpdateSendingKey(key);
+    try {
+      const res = await fetch('/api/signals/notify-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signalId: signal.id, updateType, pips: signal.livePips || 0 }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Show success
+      }
+    } catch {
+      // Ignore
+    } finally {
+      setUpdateSendingKey(null);
+    }
+  };
+
+  const displayedSignals = signals.filter((s) => {
+    if (feedTab === 'active') return s.status === 'ACTIVE' && !s.highestTargetHit;
+    if (feedTab === 'targets_hit') return s.highestTargetHit !== null && s.status !== 'SL_HIT';
+    if (feedTab === 'closed') return s.status === 'TP4_HIT' || s.status === 'SL_HIT';
+    return true;
+  });
+
+  const activeCount = signals.filter((s) => s.status === 'ACTIVE' && !s.highestTargetHit).length;
+  const hitCount = signals.filter((s) => s.highestTargetHit !== null && s.status !== 'SL_HIT').length;
+  const closedCount = signals.filter((s) => s.status === 'TP4_HIT' || s.status === 'SL_HIT').length;
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
       {/* Header bar with Real-time Streaming status */}
@@ -74,13 +107,15 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
               <span>شريط إشارات التداول اللحظية</span>
               <span className="text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 flex items-center gap-1.5 font-mono">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                {signals.length} إشارة نشطة
+                {signals.length} إشارة مرصودة
               </span>
             </h2>
             <p className="text-[11px] sm:text-xs text-slate-400 flex flex-wrap items-center gap-1.5 mt-0.5">
-              <span>تحديث On-Tick فوري</span>
+              <span>أهداف رباعية 1:2 R:R</span>
               <span>•</span>
-              <span>مصفوفة 5SOP ومربع 9 لجان وتقسيم 1:2 R:R</span>
+              <span>تأمين فوري عند TP1</span>
+              <span>•</span>
+              <span>تحديثات تليجرام لحظية 24/7</span>
             </p>
           </div>
         </div>
@@ -116,16 +151,74 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
         </div>
       </div>
 
-      {signals.length === 0 ? (
+      {/* Feed Tabs Toolbar */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-3 border-b border-slate-800/60 scrollbar-none text-xs">
+        <button
+          onClick={() => setFeedTab('all')}
+          className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+            feedTab === 'all'
+              ? 'bg-cyan-500 text-slate-950 shadow-sm shadow-cyan-500/20'
+              : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <span>جميع الإشارات</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-900/60 font-mono">
+            {signals.length}
+          </span>
+        </button>
+        <button
+          onClick={() => setFeedTab('active')}
+          className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+            feedTab === 'active'
+              ? 'bg-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/20'
+              : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <span>صفقات جارية مفتوحة</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-900/60 font-mono">
+            {activeCount}
+          </span>
+        </button>
+        <button
+          onClick={() => setFeedTab('targets_hit')}
+          className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+            feedTab === 'targets_hit'
+              ? 'bg-amber-400 text-slate-950 shadow-sm shadow-amber-400/20'
+              : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <span>حققت أهداف (TPs)</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-900/60 font-mono">
+            {hitCount}
+          </span>
+        </button>
+        <button
+          onClick={() => setFeedTab('closed')}
+          className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+            feedTab === 'closed'
+              ? 'bg-purple-500 text-white shadow-sm shadow-purple-500/20'
+              : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <span>مغلقة (TP4 / SL)</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-900/60 font-mono">
+            {closedCount}
+          </span>
+        </button>
+      </div>
+
+      {displayedSignals.length === 0 ? (
         <div className="py-12 px-4 text-center rounded-xl bg-slate-950/50 border border-slate-800/80">
           <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-3 text-slate-400">
             <ShieldAlert className="w-6 h-6 text-cyan-400" />
           </div>
           <h3 className="text-sm font-bold text-white mb-1">
-            جاري فحص السوق لحظياً على كل تيك (On-Tick Scanner Active)
+            {feedTab === 'all'
+              ? 'جاري فحص السوق لحظياً على كل تيك (On-Tick Scanner Active)'
+              : 'لا توجد صفقات في هذا التبويب حالياً'}
           </h3>
           <p className="text-xs text-slate-400 max-w-md mx-auto mb-4">
-            يراقب المحرك اللحظي أزواج العملات الـ 10 بالإضافة للذهب والفضة. يتم اقتناص الإشارة فور اكتمال 4 بوابات على الأقل (مع شرط اتجاه Daily Macro ومربع التسعة).
+            يركز المحرك اللحظي على الأصول النخبوية الأربعة (الذهب، الباوند ين، اليورو، الدولار ين). يتم اقتناص الإشارة فور اكتمال بوابات جان ومربع 9 وتأكيد وايكوف.
           </p>
           <div className="inline-flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3.5 py-2 rounded-xl border border-emerald-500/30 font-medium">
             <Radio className="w-4 h-4 animate-pulse" />
@@ -134,7 +227,7 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {signals.map((signal) => {
+          {displayedSignals.map((signal) => {
             const isBuy = signal.orderType.includes('BUY');
             const isExpanded = expandedGatesId === signal.id;
             const isSending = sendingId === signal.id;
@@ -194,9 +287,31 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                         >
                           {signal.orderType}
                         </span>
-                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700 font-mono">
-                          Intraday #1001
-                        </span>
+                        {signal.status === 'TP4_HIT' ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-black bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 flex items-center gap-1 font-mono">
+                            🏆 محقق TP4 بالكامل
+                          </span>
+                        ) : signal.status === 'SL_HIT' ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-black bg-rose-500/25 text-rose-300 border border-rose-500/50 flex items-center gap-1 font-mono">
+                            🛑 ضرب الوقف
+                          </span>
+                        ) : signal.highestTargetHit === 'TP3' ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-black bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 flex items-center gap-1 font-mono">
+                            🎯 محقق TP3
+                          </span>
+                        ) : signal.highestTargetHit === 'TP2' ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-black bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 flex items-center gap-1 font-mono">
+                            🚀 محقق TP2
+                          </span>
+                        ) : signal.highestTargetHit === 'TP1' ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-black bg-cyan-500/25 text-cyan-300 border border-cyan-500/50 flex items-center gap-1 font-mono">
+                            🎯 محقق TP1 (مؤمنة)
+                          </span>
+                        ) : (
+                          <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700 font-mono">
+                            Intraday #1001
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2">
                         <span className="font-mono">{signal.timeFormatted}</span>
@@ -300,6 +415,68 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                   </div>
                 </div>
 
+                {/* Quick Target Hit / SL Update Banner */}
+                {signal.highestTargetHit && signal.status !== 'SL_HIT' && (
+                  <div className="mb-3 p-2.5 rounded-xl bg-gradient-to-r from-emerald-950/60 to-slate-900 border border-emerald-500/40 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🎯</span>
+                      <div className="text-xs flex flex-wrap items-center gap-1.5">
+                        <span className="font-extrabold text-emerald-300">
+                          تم تحقيق {signal.highestTargetHit}!
+                        </span>
+                        <span className="text-slate-300 font-mono">
+                          (+{signal.livePips} نقطة)
+                        </span>
+                        {signal.breakEvenActive && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700 font-sans">
+                            مؤمنة BE
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleSendTargetUpdate(signal, signal.highestTargetHit!)}
+                      disabled={updateSendingKey === `${signal.id}_${signal.highestTargetHit}`}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                    >
+                      <Send className="w-3 h-3" />
+                      <span>
+                        {updateSendingKey === `${signal.id}_${signal.highestTargetHit}`
+                          ? 'جاري الإرسال...'
+                          : `إرسال تحديث ${signal.highestTargetHit} لتليجرام`}
+                      </span>
+                    </button>
+                  </div>
+                )}
+
+                {signal.status === 'SL_HIT' && (
+                  <div className="mb-3 p-2.5 rounded-xl bg-gradient-to-r from-rose-950/60 to-slate-900 border border-rose-500/40 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🛑</span>
+                      <div className="text-xs">
+                        <span className="font-extrabold text-rose-300">
+                          تم ضرب وقف الخسارة
+                        </span>
+                        <span className="text-slate-300 font-mono mr-1.5">
+                          ({signal.livePips} نقطة)
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleSendTargetUpdate(signal, 'SL')}
+                      disabled={updateSendingKey === `${signal.id}_SL`}
+                      className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                    >
+                      <Send className="w-3 h-3" />
+                      <span>
+                        {updateSendingKey === `${signal.id}_SL`
+                          ? 'جاري الإرسال...'
+                          : 'إرسال تحديث الوقف لتليجرام'}
+                      </span>
+                    </button>
+                  </div>
+                )}
+
                 {/* The 4 Quad Targets (1:2 R:R Structure) */}
                 <div className="mb-3 p-3 rounded-xl bg-slate-900/95 border border-slate-800">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-300 mb-2">
@@ -327,7 +504,10 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                       <div className="text-xs font-black text-emerald-400 mt-0.5">
                         {signal.tpTargets.tp1}
                       </div>
-                      <div className="text-[9px] text-cyan-400 mt-0.5">نقل الوقف للدخول</div>
+                      <div className="text-[9px] text-emerald-300/80 mt-0.5 font-sans font-semibold">
+                        +{calculatePipsDifference(signal.symbol, signal.entryPrice, signal.tpTargets.tp1)} نقطة
+                      </div>
+                      <div className="text-[8px] text-cyan-400 mt-0.5">نقل الوقف للدخول</div>
                     </div>
 
                     <div
@@ -346,7 +526,10 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                       <div className="text-xs font-black text-emerald-400 mt-0.5">
                         {signal.tpTargets.tp2}
                       </div>
-                      <div className="text-[9px] text-cyan-400 mt-0.5">قفل +0.5R</div>
+                      <div className="text-[9px] text-emerald-300/80 mt-0.5 font-sans font-semibold">
+                        +{calculatePipsDifference(signal.symbol, signal.entryPrice, signal.tpTargets.tp2)} نقطة
+                      </div>
+                      <div className="text-[8px] text-cyan-400 mt-0.5">قفل +0.5R</div>
                     </div>
 
                     <div
@@ -365,7 +548,10 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                       <div className="text-xs font-black text-emerald-400 mt-0.5">
                         {signal.tpTargets.tp3}
                       </div>
-                      <div className="text-[9px] text-cyan-400 mt-0.5">تأمين 75% + تريلنج</div>
+                      <div className="text-[9px] text-emerald-300/80 mt-0.5 font-sans font-semibold">
+                        +{calculatePipsDifference(signal.symbol, signal.entryPrice, signal.tpTargets.tp3)} نقطة
+                      </div>
+                      <div className="text-[8px] text-cyan-400 mt-0.5">تأمين 75% + تريلنج</div>
                     </div>
 
                     <div
@@ -384,7 +570,10 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                       <div className="text-xs font-black text-emerald-300 mt-0.5">
                         {signal.tpTargets.tp4}
                       </div>
-                      <div className="text-[9px] text-emerald-400 mt-0.5">الهدف النهائي الصلب</div>
+                      <div className="text-[9px] text-emerald-300/80 mt-0.5 font-sans font-semibold">
+                        +{calculatePipsDifference(signal.symbol, signal.entryPrice, signal.tpTargets.tp4)} نقطة
+                      </div>
+                      <div className="text-[8px] text-emerald-400 mt-0.5">الهدف النهائي الصلب</div>
                     </div>
                   </div>
                 </div>
@@ -446,24 +635,41 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
 
                 {/* Actions: Send to Telegram + View Interactive Chart + Copy */}
                 <div className="flex items-center gap-2 pt-3 border-t border-slate-800/80">
-                  <button
-                    onClick={() => handleSendTelegram(signal)}
-                    disabled={isSending || signal.telegramSent}
-                    className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 min-h-[40px] cursor-pointer active:scale-98 ${
-                      signal.telegramSent
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default'
-                        : 'bg-sky-600 hover:bg-sky-500 text-white shadow-md shadow-sky-600/20'
-                    }`}
-                  >
-                    <Send className={`w-3.5 h-3.5 ${isSending ? 'animate-spin' : ''}`} />
-                    <span>
-                      {signal.telegramSent
-                        ? 'تم الإرسال لتليجرام ✓'
-                        : isSending
-                        ? 'جاري الإرسال...'
-                        : 'إرسال إلى تليجرام'}
-                    </span>
-                  </button>
+                  {(() => {
+                    const cleanCurrent = signal.symbol.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                    const otherSentSameSymbol = signals.some((s) => {
+                      const cleanOther = s.symbol.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                      const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'CANCELLED';
+                      return cleanOther === cleanCurrent && s.id !== signal.id && s.telegramSent && !isClosed;
+                    });
+                    const isAlreadySent = signal.telegramSent || otherSentSameSymbol;
+
+                    return (
+                      <button
+                        onClick={() => handleSendTelegram(signal)}
+                        disabled={isSending || isAlreadySent}
+                        className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 min-h-[40px] cursor-pointer active:scale-98 ${
+                          isAlreadySent
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default'
+                            : 'bg-sky-600 hover:bg-sky-500 text-white shadow-md shadow-sky-600/20'
+                        }`}
+                        title={
+                          otherSentSameSymbol
+                            ? `تم إرسال إشارة ${signal.symbol} مسبقاً وتوجد صفقة قائمة لنفس العملة لمنع التكرار`
+                            : undefined
+                        }
+                      >
+                        <Send className={`w-3.5 h-3.5 ${isSending ? 'animate-spin' : ''}`} />
+                        <span>
+                          {isAlreadySent
+                            ? 'تم الإرسال لتليجرام ✓'
+                            : isSending
+                            ? 'جاري الإرسال...'
+                            : 'إرسال إلى تليجرام'}
+                        </span>
+                      </button>
+                    );
+                  })()}
 
                   {onOpenChartForSignal && (
                     <button

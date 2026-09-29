@@ -11,8 +11,18 @@ import {
   getAllCandleStores,
   getAllTicks,
 } from './src/services/marketDataFeed';
-import { scanMarketWatchSymbols } from './src/services/sopMatrixScanner';
-import { sendTradeSignalToTelegram, testTelegramConnection } from './src/services/telegramService';
+import {
+  scanMarketWatchSymbols,
+  updateSignalRealtimeMetrics,
+} from './src/services/sopMatrixScanner';
+import {
+  sendTradeSignalToTelegram,
+  sendTargetHitToTelegram,
+  sendStopLossHitToTelegram,
+  sendBreakevenToTelegram,
+  testTelegramConnection,
+} from './src/services/telegramService';
+import { TARGET_SYMBOLS } from './src/data/symbols';
 import { isWeekendMarketClosed } from './src/services/shieldMonitor';
 import {
   initializeDatabase,
@@ -55,41 +65,154 @@ interface SignalCooldownEntry {
 // Cooldown tracker per symbol to ensure continuous intraday signals while avoiding rapid spam or flipping
 const symbolSignalCooldowns = new Map<string, SignalCooldownEntry>();
 
-// Cooldown duration: 60 minutes per symbol, or if price shifts by > 40 pips / $15
-const SIGNAL_COOLDOWN_MS = 60 * 60 * 1000;
+// Cooldown duration: 45 minutes minimum between new signals for the SAME symbol
+const SIGNAL_COOLDOWN_MS = 45 * 60 * 1000;
+
+function normalizeServerSymbol(sym: string): string {
+  return sym.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+}
 
 function canDispatchSignal(sig: TradeSignal): boolean {
-  const symKey = sig.symbol;
+  const symKey = normalizeServerSymbol(sig.symbol);
   const now = Date.now();
+
+  // 1. Strict Anti-Duplicate Check: If an active unclosed signal already exists for this same currency, DO NOT dispatch another!
+  const hasActiveSignal = serverSignals.some((s) => {
+    const sKey = normalizeServerSymbol(s.symbol);
+    const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'CANCELLED';
+    return sKey === symKey && !isClosed;
+  });
+
+  if (hasActiveSignal) {
+    return false;
+  }
+
+  // 2. Cooldown check per symbol
   const lastEntry = symbolSignalCooldowns.get(symKey);
-
-  if (!lastEntry) {
-    return true;
+  if (lastEntry) {
+    if (now - lastEntry.timestamp < SIGNAL_COOLDOWN_MS) {
+      return false;
+    }
   }
 
-  // Allow after cooldown has elapsed
-  if (now - lastEntry.timestamp >= SIGNAL_COOLDOWN_MS) {
-    return true;
-  }
-
-  // Allow if same direction and price moved significantly (> 40 pips on Forex, > $15 on Gold)
-  const isMetal = sig.symbol.includes('XAU') || sig.symbol.includes('XAG');
-  const pipDistance = isMetal ? 15.0 : 0.0040;
-  if (sig.orderType === lastEntry.orderType && Math.abs(sig.entryPrice - lastEntry.entryPrice) >= pipDistance) {
-    return true;
-  }
-
-  return false;
+  return true;
 }
 
 function recordDispatchedSignal(sig: TradeSignal) {
-  const symKey = sig.symbol;
+  const symKey = normalizeServerSymbol(sig.symbol);
   symbolSignalCooldowns.set(symKey, {
     symbol: sig.symbol,
     orderType: sig.orderType,
     entryPrice: sig.entryPrice,
     timestamp: Date.now(),
   });
+}
+
+// Track notified events per signal to prevent duplicate Telegram alerts
+const notifiedSignalEvents = new Map<string, Set<string>>();
+
+/**
+ * Tracks active signals in real-time against incoming market ticks,
+ * automatically detecting TP1, TP2, TP3, TP4 (Full Win) and Stop Loss hits,
+ * and dispatching instant Telegram update notifications.
+ */
+function trackActiveSignalsLifeCycle() {
+  if (serverSignals.length === 0) return;
+  const currentTicks = getAllTicks();
+
+  for (const sig of serverSignals) {
+    if (sig.status === 'TP4_HIT' || sig.status === 'SL_HIT' || sig.status === 'CANCELLED') {
+      continue;
+    }
+
+    const sym = TARGET_SYMBOLS.find((s) => s.symbol === sig.symbol || s.id === sig.symbol);
+    if (!sym) continue;
+    const tick = currentTicks[sym.id];
+    if (!tick) continue;
+
+    // Update real-time metrics (pips, PnL, target hit flags, trailing stop)
+    const updated = updateSignalRealtimeMetrics(sig, tick, sym);
+    Object.assign(sig, updated);
+
+    if (!notifiedSignalEvents.has(sig.id)) {
+      notifiedSignalEvents.set(sig.id, new Set<string>());
+    }
+    const events = notifiedSignalEvents.get(sig.id)!;
+
+    // 1. Check TP1 Hit
+    if (
+      (sig.highestTargetHit === 'TP1' ||
+        sig.highestTargetHit === 'TP2' ||
+        sig.highestTargetHit === 'TP3' ||
+        sig.highestTargetHit === 'TP4') &&
+      !events.has('TP1')
+    ) {
+      events.add('TP1');
+      console.log(`🎯 [Railway 24/7 Worker] TP1 Hit for ${sig.symbol}! Broadcasting update to Telegram...`);
+      saveTradeSignalToDb(sig).catch(() => {});
+      if (AUTO_SEND) {
+        sendTargetHitToTelegram(sig, 'TP1', sig.livePips || 0, BOT_TOKEN, [CHANNEL_ID]).catch((err) =>
+          console.warn('Telegram TP1 broadcast error:', err)
+        );
+      }
+    }
+
+    // 2. Check TP2 Hit
+    if (
+      (sig.highestTargetHit === 'TP2' ||
+        sig.highestTargetHit === 'TP3' ||
+        sig.highestTargetHit === 'TP4') &&
+      !events.has('TP2')
+    ) {
+      events.add('TP2');
+      console.log(`🚀 [Railway 24/7 Worker] TP2 Hit for ${sig.symbol}! Broadcasting update to Telegram...`);
+      saveTradeSignalToDb(sig).catch(() => {});
+      if (AUTO_SEND) {
+        sendTargetHitToTelegram(sig, 'TP2', sig.livePips || 0, BOT_TOKEN, [CHANNEL_ID]).catch((err) =>
+          console.warn('Telegram TP2 broadcast error:', err)
+        );
+      }
+    }
+
+    // 3. Check TP3 Hit
+    if (
+      (sig.highestTargetHit === 'TP3' || sig.highestTargetHit === 'TP4') &&
+      !events.has('TP3')
+    ) {
+      events.add('TP3');
+      console.log(`🎯 [Railway 24/7 Worker] TP3 Hit for ${sig.symbol}! Broadcasting update to Telegram...`);
+      saveTradeSignalToDb(sig).catch(() => {});
+      if (AUTO_SEND) {
+        sendTargetHitToTelegram(sig, 'TP3', sig.livePips || 0, BOT_TOKEN, [CHANNEL_ID]).catch((err) =>
+          console.warn('Telegram TP3 broadcast error:', err)
+        );
+      }
+    }
+
+    // 4. Check TP4 Full Target Hit
+    if ((updated.status as string) === 'TP4_HIT' && !events.has('TP4')) {
+      events.add('TP4');
+      console.log(`🏆 [Railway 24/7 Worker] ALL TARGETS HIT (TP4) for ${sig.symbol}! Broadcasting full win to Telegram...`);
+      saveTradeSignalToDb(sig).catch(() => {});
+      if (AUTO_SEND) {
+        sendTargetHitToTelegram(sig, 'TP4', sig.livePips || 0, BOT_TOKEN, [CHANNEL_ID]).catch((err) =>
+          console.warn('Telegram TP4 broadcast error:', err)
+        );
+      }
+    }
+
+    // 5. Check SL Hit
+    if ((updated.status as string) === 'SL_HIT' && !events.has('SL')) {
+      events.add('SL');
+      console.log(`🛑 [Railway 24/7 Worker] Stop Loss Hit for ${sig.symbol}. Broadcasting transparency update to Telegram...`);
+      saveTradeSignalToDb(sig).catch(() => {});
+      if (AUTO_SEND) {
+        sendStopLossHitToTelegram(sig, sig.livePips || 0, BOT_TOKEN, [CHANNEL_ID]).catch((err) =>
+          console.warn('Telegram SL broadcast error:', err)
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -114,11 +237,17 @@ async function start24x7BackgroundScanner() {
     syncAllRealMarketData().catch((err) => console.warn('⚠️ [Market Data] Periodic sync error:', err));
   }, 30000);
 
-  // Micro-fluctuation loop every 3 seconds for realistic active chart ticking
+  // Micro-fluctuation loop every 3 seconds for realistic active chart ticking & live signal life-cycle tracking
   setInterval(() => {
     // Only tick if market is not in weekend closure
     if (!isWeekendMarketClosed()) {
       emitBatchMarketTicks();
+    }
+    // Track active signals life cycle against real market prices (TP1, TP2, TP3, TP4, SL)
+    try {
+      trackActiveSignalsLifeCycle();
+    } catch (err) {
+      console.warn('⚠️ [Signal Tracking] Error in life-cycle loop:', err);
     }
   }, 3000);
 
@@ -267,6 +396,41 @@ app.get('/api/signals', (req, res) => {
     count: serverSignals.length,
     timestamp: Date.now(),
   });
+});
+
+// Manual trigger for sending target hit or breakeven update to Telegram from frontend
+app.post('/api/signals/notify-update', async (req, res) => {
+  try {
+    const { signalId, updateType, pips } = req.body;
+    let signal = serverSignals.find((s) => s.id === signalId);
+    if (!signal) {
+      // Fallback: fetch from database
+      const dbRes = await getTradeSignalsFromDb(50);
+      signal = dbRes.signals?.find((s) => s.id === signalId);
+    }
+
+    if (!signal) {
+      return res.status(404).json({ success: false, error: 'لم يتم العثور على الصفقة المحددة' });
+    }
+
+    let result;
+    if (updateType === 'TP1' || updateType === 'TP2' || updateType === 'TP3' || updateType === 'TP4') {
+      result = await sendTargetHitToTelegram(signal, updateType, pips || signal.livePips || 0, BOT_TOKEN, [CHANNEL_ID]);
+    } else if (updateType === 'SL') {
+      result = await sendStopLossHitToTelegram(signal, pips || signal.livePips || 0, BOT_TOKEN, [CHANNEL_ID]);
+    } else if (updateType === 'BREAKEVEN') {
+      result = await sendBreakevenToTelegram(signal, BOT_TOKEN, [CHANNEL_ID]);
+    } else if (updateType === 'NEW_SIGNAL') {
+      result = await sendTradeSignalToTelegram(signal, BOT_TOKEN, [CHANNEL_ID]);
+    } else {
+      return res.status(400).json({ success: false, error: 'نوع التحديث غير صالح' });
+    }
+
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
 });
 
 // Test Telegram connection endpoint

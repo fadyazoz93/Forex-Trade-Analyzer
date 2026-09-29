@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { InteractiveCandlestickModal } from './components/InteractiveCandlestickModal';
 import { MarketSessionsClock } from './components/MarketSessionsClock';
 import { MarketWatch } from './components/MarketWatch';
+import { MobileBottomNav, MobileTab } from './components/MobileBottomNav';
 import { RiskCalculatorModal } from './components/RiskCalculatorModal';
 import { ShieldBanner } from './components/ShieldBanner';
 import { SignalFeed } from './components/SignalFeed';
@@ -42,6 +43,7 @@ import {
   DEFAULT_TELEGRAM_CHANNEL_ID,
   DEFAULT_TELEGRAM_CHAT_ID,
   DEFAULT_TELEGRAM_TOKEN,
+  normalizeSymbolKey,
   sendTradeSignalToTelegram,
 } from './services/telegramService';
 import {
@@ -63,6 +65,7 @@ export default function App() {
   const engineRef = useRef<EngineMode>('intraday');
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [selectedSymbolId, setSelectedSymbolId] = useState<string>('XAUUSD');
+  const [mobileTab, setMobileTab] = useState<MobileTab>('signals');
   const [tickCount, setTickCount] = useState<number>(0);
   const [isAudioOn, setIsAudioOn] = useState<boolean>(isAudioEnabled());
 
@@ -284,13 +287,13 @@ export default function App() {
     // Shield: Do not process instant signals during weekend market closure
     if (isWeekendMarketClosed()) return;
 
-    // Avoid duplicate active signal on the exact same symbol and direction
-    const alreadyActive = activeSignalsRef.current.some(
-      (s) =>
-        s.symbol === newSignal.symbol &&
-        s.orderType === newSignal.orderType &&
-        s.status === 'ACTIVE'
-    );
+    // Strict Anti-Duplicate Rule: Do NOT create or duplicate an active trade for the SAME symbol if already active
+    const cleanSym = normalizeSymbolKey(newSignal.symbol);
+    const alreadyActive = activeSignalsRef.current.some((s) => {
+      const sClean = normalizeSymbolKey(s.symbol);
+      const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'CANCELLED';
+      return sClean === cleanSym && !isClosed;
+    });
     if (alreadyActive) return;
 
     // Immediately update ref to prevent synchronous race condition from subsequent ticks
@@ -314,11 +317,10 @@ export default function App() {
       return [newSignal, ...prev.slice(0, 49)];
     });
 
-    // Auto-send to Telegram channel immediately if enabled
+    // Auto-send to Telegram channel immediately if enabled (strictly once per currency at the same time)
     if (telegramConfigRef.current.autoSend) {
-      const sigKey = getSignalKey(newSignal);
-      if (!sentSignalsTrackerRef.current.has(sigKey)) {
-        sentSignalsTrackerRef.current.add(sigKey);
+      if (!sentSignalsTrackerRef.current.has(cleanSym)) {
+        sentSignalsTrackerRef.current.add(cleanSym);
         handleSendTelegramSignal(newSignal);
       }
     }
@@ -365,30 +367,35 @@ export default function App() {
 
     // If signals discovered
     if (signals.length > 0) {
-      setActiveSignals((prev) => {
-        const merged = [...signals];
-        prev.forEach((oldSig) => {
-          if (!merged.some((m) => m.symbol === oldSig.symbol && m.orderType === oldSig.orderType)) {
-            merged.push(oldSig);
-          }
+      // Filter out symbols that already have an ongoing active trade (prevent duplicate trades on the same currency)
+      const eligibleSignals = signals.filter((sig) => {
+        const sigClean = normalizeSymbolKey(sig.symbol);
+        const hasActive = activeSignalsRef.current.some((active) => {
+          const activeClean = normalizeSymbolKey(active.symbol);
+          const isClosed = active.status === 'TP4_HIT' || active.status === 'SL_HIT' || active.status === 'CANCELLED';
+          return activeClean === sigClean && !isClosed;
         });
-        return merged;
+        return !hasActive;
       });
 
-      setSignalHistory((prev) => {
-        const updated = [...signals, ...prev];
-        return updated.slice(0, 50);
-      });
+      if (eligibleSignals.length > 0) {
+        setActiveSignals((prev) => [...eligibleSignals, ...prev]);
 
-      // Auto-send newly discovered signals to Telegram channel if enabled
-      if (telegramConfigRef.current.autoSend) {
-        signals.forEach((sig) => {
-          const sigKey = getSignalKey(sig);
-          if (!sentSignalsTrackerRef.current.has(sigKey)) {
-            sentSignalsTrackerRef.current.add(sigKey);
-            handleSendTelegramSignal(sig);
-          }
+        setSignalHistory((prev) => {
+          const updated = [...eligibleSignals, ...prev];
+          return updated.slice(0, 50);
         });
+
+        // Auto-send newly discovered signals to Telegram channel if enabled (strictly once per currency at the same time)
+        if (telegramConfigRef.current.autoSend) {
+          eligibleSignals.forEach((sig) => {
+            const cleanSym = normalizeSymbolKey(sig.symbol);
+            if (!sentSignalsTrackerRef.current.has(cleanSym)) {
+              sentSignalsTrackerRef.current.add(cleanSym);
+              handleSendTelegramSignal(sig);
+            }
+          });
+        }
       }
     }
 
@@ -419,6 +426,24 @@ export default function App() {
       return;
     }
 
+    const cleanSym = normalizeSymbolKey(signal.symbol);
+
+    // Prevent duplicate sending if this signal was already sent or another active signal for this currency was already sent
+    const alreadySentActiveSignal = activeSignals.some((s) => {
+      const sClean = normalizeSymbolKey(s.symbol);
+      const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'CANCELLED';
+      return sClean === cleanSym && s.id !== signal.id && s.telegramSent && !isClosed;
+    });
+
+    if (signal.telegramSent || alreadySentActiveSignal) {
+      setToast({
+        id: Date.now(),
+        message: `تم منع التكرار: توجد إشارة مرسلة مسبقاً للعملة (${signal.symbol}) ولديها صفقة قائمة في نفس الوقت.`,
+        type: 'sell',
+      });
+      return;
+    }
+
     setIsSendingTelegram(true);
 
     const cfg = telegramConfigRef.current;
@@ -439,6 +464,7 @@ export default function App() {
     );
 
     if (result.success) {
+      sentSignalsTrackerRef.current.add(cleanSym);
       setActiveSignals((prev) =>
         prev.map((s) => (s.id === signal.id ? { ...s, telegramSent: true } : s))
       );
@@ -447,14 +473,14 @@ export default function App() {
       );
       setToast({
         id: Date.now(),
-        message: `تم إرسال إشارة ${signal.symbol} تلقائياً إلى قناة تليجرام بنجاح!`,
+        message: `تم إرسال إشارة ${signal.symbol} إلى تليجرام بنجاح!`,
         type: signal.orderType.includes('BUY') ? 'buy' : 'sell',
       });
     } else if (result.error) {
       console.warn('Telegram auto-send alert:', result.error);
       setToast({
         id: Date.now(),
-        message: `تنبيه تليجرام: ${result.error}`,
+        message: result.error,
         type: 'sell',
       });
     }
@@ -613,50 +639,114 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 py-3 sm:py-6 space-y-3.5 sm:space-y-6 pb-24 md:pb-6">
+        {/* Mobile Fast Tab Bar */}
+        <div className="md:hidden flex items-center justify-between bg-slate-900/90 border border-slate-800 p-1 rounded-2xl shadow-sm">
+          <button
+            onClick={() => setMobileTab('signals')}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer ${
+              mobileTab === 'signals' ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <span>الإشارات</span>
+            {activeSignals.length > 0 && (
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  mobileTab === 'signals' ? 'bg-slate-950 text-cyan-300' : 'bg-emerald-500 text-slate-950 font-bold'
+                }`}
+              >
+                {activeSignals.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setMobileTab('market')}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+              mobileTab === 'market' ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            السوق
+          </button>
+          <button
+            onClick={() => setMobileTab('sessions')}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+              mobileTab === 'sessions' ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            الجلسات
+          </button>
+          <button
+            onClick={() => setMobileTab('history')}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+              mobileTab === 'history' ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            السجل
+          </button>
+          <button
+            onClick={() => setMobileTab('all')}
+            className={`px-2.5 py-2 text-[11px] font-bold rounded-xl transition-all cursor-pointer ${
+              mobileTab === 'all' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+            }`}
+            title="عرض جميع الأقسام معاً"
+          >
+            الكل
+          </button>
+        </div>
+
         {/* Real-time Global Forex Market Sessions Clock */}
-        <MarketSessionsClock onOpenSchedule={() => setIsSessionHolidayModalOpen(true)} />
+        <div className={mobileTab === 'sessions' || mobileTab === 'all' ? 'block' : 'hidden md:block'}>
+          <MarketSessionsClock onOpenSchedule={() => setIsSessionHolidayModalOpen(true)} />
+        </div>
 
         {/* Active Real-Time Trading Signals Feed */}
-        <SignalFeed
-          signals={activeSignals}
-          onSendTelegram={handleSendTelegramSignal}
-          isSendingTelegram={isSendingTelegram}
-          onSelectSignalForInspection={(sig) => {
-            const sym = TARGET_SYMBOLS.find((s) => s.symbol === sig.symbol);
-            if (sym) setInspectSymbol(sym);
-          }}
-          onOpenChartForSignal={(sig) => {
-            const sym = TARGET_SYMBOLS.find((s) => s.symbol === sig.symbol);
-            if (sym) setChartSymbol(sym);
-          }}
-          isAudioOn={isAudioOn}
-          onToggleAudio={handleToggleAudio}
-          tickCount={tickCount}
-        />
+        <div className={mobileTab === 'signals' || mobileTab === 'all' ? 'block' : 'hidden md:block'}>
+          <SignalFeed
+            signals={activeSignals}
+            onSendTelegram={handleSendTelegramSignal}
+            isSendingTelegram={isSendingTelegram}
+            onSelectSignalForInspection={(sig) => {
+              const sym = TARGET_SYMBOLS.find((s) => s.symbol === sig.symbol);
+              if (sym) setInspectSymbol(sym);
+            }}
+            onOpenChartForSignal={(sig) => {
+              const sym = TARGET_SYMBOLS.find((s) => s.symbol === sig.symbol);
+              if (sym) setChartSymbol(sym);
+            }}
+            isAudioOn={isAudioOn}
+            onToggleAudio={handleToggleAudio}
+            tickCount={tickCount}
+          />
+        </div>
 
         {/* Real-time Market Watch (Top 10 Forex Pairs + Gold + Silver) */}
-        <MarketWatch
-          symbols={TARGET_SYMBOLS}
-          ticks={ticks}
-          evaluations={evaluations}
-          selectedSymbolId={selectedSymbolId}
-          liveFeedStatus={liveFeedStatus}
-          onSelectSymbol={setSelectedSymbolId}
-          onInspectGann={(sym) => setInspectSymbol(sym)}
-          onUpdateCustomPrice={handleUpdateCustomPrice}
-          onForceSync={forceSyncLivePrices}
-        />
+        <div className={mobileTab === 'market' || mobileTab === 'all' ? 'block' : 'hidden md:block'}>
+          <MarketWatch
+            symbols={TARGET_SYMBOLS}
+            ticks={ticks}
+            evaluations={evaluations}
+            selectedSymbolId={selectedSymbolId}
+            liveFeedStatus={liveFeedStatus}
+            onSelectSymbol={setSelectedSymbolId}
+            onInspectGann={(sym) => setInspectSymbol(sym)}
+            onUpdateCustomPrice={handleUpdateCustomPrice}
+            onForceSync={forceSyncLivePrices}
+          />
+        </div>
 
         {/* Signals History & Analytics Table */}
-        <SignalHistoryTable history={signalHistory} onExportCSV={handleExportCSV} />
+        <div className={mobileTab === 'history' || mobileTab === 'all' ? 'block' : 'hidden md:block'}>
+          <SignalHistoryTable history={signalHistory} onExportCSV={handleExportCSV} />
+        </div>
 
         {/* Educational Strategy Matrix & Gann Rules Guide */}
-        <StrategyMatrixExplainer />
+        <div className={mobileTab === 'all' ? 'block' : 'hidden md:block'}>
+          <StrategyMatrixExplainer />
+        </div>
       </main>
 
       {/* Footer */}
-      <footer className="bg-slate-900 border-t border-slate-800 py-4 text-center text-xs text-slate-500">
+      <footer className="bg-slate-900 border-t border-slate-800 py-4 pb-20 md:pb-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
@@ -667,6 +757,20 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Persistent Mobile Bottom Navigation Bar */}
+      <MobileBottomNav
+        activeTab={mobileTab}
+        onSelectTab={setMobileTab}
+        activeSignalsCount={activeSignals.length}
+        onOpenRiskCalc={() => setIsRiskModalOpen(true)}
+        onOpenTelegram={() => setIsTelegramModalOpen(true)}
+        onOpenDatabase={() => setIsDatabaseModalOpen(true)}
+        onOpenSessions={() => setIsSessionHolidayModalOpen(true)}
+        isAudioOn={isAudioOn}
+        onToggleAudio={handleToggleAudio}
+        isWeekend={marketHoursStatus.isWeekend}
+      />
 
       {/* Modals */}
       {inspectSymbol && (
