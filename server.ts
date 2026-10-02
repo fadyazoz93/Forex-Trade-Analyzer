@@ -245,23 +245,23 @@ async function checkAndDispatchMarketSessionAlerts() {
     sentSessionEventsToday.clear();
   }
 
-  // 1. Friday Weekend Close Warning (Friday 21:00 UTC / 12:00 midnight Mecca)
-  if (utcDay === 5 && utcHour === 21 && utcMin < 10) {
-    const key = `WEEKEND_CLOSE_${dateKey}`;
+  // 1. Friday Weekend Close Warning (Friday 20:30 UTC / 11:30 PM Mecca - 30 minutes BEFORE 21:00 close)
+  if (utcDay === 5 && utcHour === 20 && utcMin >= 30 && utcMin < 40) {
+    const key = `WEEKEND_CLOSE_PRE30_${dateKey}`;
     if (!sentSessionEventsToday.has(key)) {
       sentSessionEventsToday.add(key);
-      console.log('📢 [Railway 24/7 Worker] Dispatching Weekend Market Close notification to Telegram...');
+      console.log('📢 [Railway 24/7 Worker] Dispatching Weekend Market Close (-30 Min Early Warning) notification...');
       await sendWeekendStatusToTelegram('CLOSE_ALERT', BOT_TOKEN, [CHANNEL_ID]);
     }
     return;
   }
 
-  // 2. Sunday Weekend Open Alert (Sunday 21:00 UTC / 12:00 midnight Mecca)
-  if (utcDay === 0 && utcHour === 21 && utcMin < 10) {
-    const key = `WEEKEND_OPEN_${dateKey}`;
+  // 2. Sunday Weekend Open Alert (Sunday 21:30 UTC / 12:30 AM Mecca - 30 minutes AFTER 21:00 open)
+  if (utcDay === 0 && utcHour === 21 && utcMin >= 30 && utcMin < 40) {
+    const key = `WEEKEND_OPEN_POST30_${dateKey}`;
     if (!sentSessionEventsToday.has(key)) {
       sentSessionEventsToday.add(key);
-      console.log('📢 [Railway 24/7 Worker] Dispatching Weekly Market Open notification to Telegram...');
+      console.log('📢 [Railway 24/7 Worker] Dispatching Weekly Market Open (+30 Min Stability Confirmation) notification...');
       await sendWeekendStatusToTelegram('OPEN_ALERT', BOT_TOKEN, [CHANNEL_ID]);
     }
     return;
@@ -272,27 +272,27 @@ async function checkAndDispatchMarketSessionAlerts() {
     return;
   }
 
-  // 3. Tokyo Session Open (00:00 UTC / 03:00 Mecca)
-  if (utcHour === 0 && utcMin < 10) {
-    const key = `TOKYO_OPEN_${dateKey}`;
+  // 3. Tokyo Session Open (+30 Min after 00:00 UTC -> 00:30 UTC / 03:30 AM Mecca)
+  if (utcHour === 0 && utcMin >= 30 && utcMin < 40) {
+    const key = `TOKYO_OPEN_POST30_${dateKey}`;
     if (!sentSessionEventsToday.has(key)) {
       sentSessionEventsToday.add(key);
       const tokyo = SESSIONS_LIST.find((s) => s.id === 'tokyo');
       if (tokyo) {
-        console.log('📢 [Railway 24/7 Worker] Dispatching Tokyo Session Open notification...');
+        console.log('📢 [Railway 24/7 Worker] Dispatching Tokyo Session Open (+30 min confirmation)...');
         await sendSessionAlertToTelegram(tokyo, 'OPEN', BOT_TOKEN, [CHANNEL_ID]);
       }
     }
   }
 
-  // 4. London Session Open (07:00 UTC / 10:00 Mecca) & London Open Kill Zone
-  if (utcHour === 7 && utcMin < 10) {
-    const key = `LONDON_OPEN_${dateKey}`;
+  // 4. London Session Open (+30 Min after 07:00 UTC -> 07:30 UTC / 10:30 AM Mecca) & Kill Zone
+  if (utcHour === 7 && utcMin >= 30 && utcMin < 40) {
+    const key = `LONDON_OPEN_POST30_${dateKey}`;
     if (!sentSessionEventsToday.has(key)) {
       sentSessionEventsToday.add(key);
       const london = SESSIONS_LIST.find((s) => s.id === 'london');
       if (london) {
-        console.log('📢 [Railway 24/7 Worker] Dispatching London Session Open notification...');
+        console.log('📢 [Railway 24/7 Worker] Dispatching London Session Open (+30 min confirmation)...');
         await sendSessionAlertToTelegram(london, 'OPEN', BOT_TOKEN, [CHANNEL_ID]);
       }
       setTimeout(() => {
@@ -301,35 +301,35 @@ async function checkAndDispatchMarketSessionAlerts() {
     }
   }
 
-  // 5. London - New York Golden Overlap (12:30 UTC / 15:30 Mecca)
-  if (utcHour === 12 && utcMin >= 30 && utcMin < 40) {
-    const key = `GOLDEN_OVERLAP_${dateKey}`;
+  // 5. London - New York Golden Overlap (+30 Min after NY 12:30 open -> 13:00 UTC / 04:00 PM Mecca)
+  if (utcHour === 13 && utcMin < 10) {
+    const key = `GOLDEN_OVERLAP_POST30_${dateKey}`;
     if (!sentSessionEventsToday.has(key)) {
       sentSessionEventsToday.add(key);
-      console.log('📢 [Railway 24/7 Worker] Dispatching Golden Overlap Kill Zone notification...');
+      console.log('📢 [Railway 24/7 Worker] Dispatching Golden Overlap Kill Zone (+30 min post-open)...');
       await sendKillZoneAlertToTelegram('OVERLAP', BOT_TOKEN, [CHANNEL_ID]);
     }
   }
 
-  // 6. London Session Close (16:00 UTC / 19:00 Mecca)
-  if (utcHour === 16 && utcMin < 10) {
-    const key = `LONDON_CLOSE_${dateKey}`;
+  // 6. London Session Close Warning (-30 Min before 16:00 close -> 15:30 UTC / 06:30 PM Mecca)
+  if (utcHour === 15 && utcMin >= 30 && utcMin < 40) {
+    const key = `LONDON_CLOSE_PRE30_${dateKey}`;
     if (!sentSessionEventsToday.has(key)) {
       sentSessionEventsToday.add(key);
       const london = SESSIONS_LIST.find((s) => s.id === 'london');
       if (london) {
-        console.log('📢 [Railway 24/7 Worker] Dispatching London Session Close notification...');
+        console.log('📢 [Railway 24/7 Worker] Dispatching London Session Close (-30 min pre-warning)...');
         await sendSessionAlertToTelegram(london, 'CLOSE', BOT_TOKEN, [CHANNEL_ID]);
       }
     }
   }
 
-  // 7. Daily Rollover & Spread Warning (21:00 UTC / 12:00 midnight Mecca) on Mon-Thu
-  if (utcHour === 21 && utcMin < 10 && utcDay !== 5) {
-    const key = `ROLLOVER_WARN_${dateKey}`;
+  // 7. Daily Rollover & Spread Pre-Warning (-30 Min before 21:00 rollover -> 20:30 UTC / 11:30 PM Mecca) on Mon-Thu
+  if (utcHour === 20 && utcMin >= 30 && utcMin < 40 && utcDay !== 5) {
+    const key = `ROLLOVER_WARN_PRE30_${dateKey}`;
     if (!sentSessionEventsToday.has(key)) {
       sentSessionEventsToday.add(key);
-      console.log('📢 [Railway 24/7 Worker] Dispatching Daily Rollover warning notification...');
+      console.log('📢 [Railway 24/7 Worker] Dispatching Daily Rollover (-30 min pre-warning)...');
       await sendKillZoneAlertToTelegram('ROLLOVER', BOT_TOKEN, [CHANNEL_ID]);
     }
   }
