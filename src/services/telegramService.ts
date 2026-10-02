@@ -1,5 +1,14 @@
 import { TradeSignal } from '../types';
 import { isWeekendMarketClosed } from './shieldMonitor';
+import {
+  EconomicDecisionEvent,
+  formatDailyMarketBriefTelegram,
+  formatEconomicDecisionTelegram,
+  formatKillZoneTelegram,
+  formatSessionAlertTelegram,
+  formatWeekendStatusTelegram,
+  MarketSessionDetail,
+} from './marketHoursService';
 
 export const DEFAULT_TELEGRAM_TOKEN = '8676995594:AAGUvAV4X8P_pwk0NbIKHEWMyZ7NgbktjOc';
 export const DEFAULT_TELEGRAM_CHANNEL_ID = '-1004433974736';
@@ -456,14 +465,76 @@ export async function sendTargetHitToTelegram(
 
 /**
  * Dispatches a Stop Loss Hit notification to Telegram
+ * PERMANENTLY DISABLED per user request: Stop Loss messages are cancelled and replaced
+ * with market session open/close, golden trading windows, and high-impact economic alerts.
  */
 export async function sendStopLossHitToTelegram(
   signal: TradeSignal,
-  livePips: number,
+  _livePips: number,
+  _token: string = DEFAULT_TELEGRAM_TOKEN,
+  _targetIds: string[] | string = [DEFAULT_TELEGRAM_CHANNEL_ID, DEFAULT_TELEGRAM_CHAT_ID]
+): Promise<TelegramSendResult> {
+  console.log(`ℹ️ [Telegram Alert] Stop Loss message for ${signal.symbol} silenced (SL alert cancelled per user request).`);
+  return { success: true };
+}
+
+/**
+ * Broadcasts Market Session Open or Close Alert to Telegram
+ */
+export async function sendSessionAlertToTelegram(
+  session: MarketSessionDetail,
+  eventType: 'OPEN' | 'CLOSE',
   token: string = DEFAULT_TELEGRAM_TOKEN,
   targetIds: string[] | string = [DEFAULT_TELEGRAM_CHANNEL_ID, DEFAULT_TELEGRAM_CHAT_ID]
 ): Promise<TelegramSendResult> {
-  const msg = formatStopLossHitTelegramMessage(signal, livePips, true);
+  const msg = formatSessionAlertTelegram(session, eventType, true);
+  return sendTelegramMultiTarget(token, targetIds, msg);
+}
+
+/**
+ * Broadcasts Golden Trading Window (Kill Zone) or Rollover Alert to Telegram
+ */
+export async function sendKillZoneAlertToTelegram(
+  zoneType: 'LONDON_OPEN' | 'OVERLAP' | 'ROLLOVER',
+  token: string = DEFAULT_TELEGRAM_TOKEN,
+  targetIds: string[] | string = [DEFAULT_TELEGRAM_CHANNEL_ID, DEFAULT_TELEGRAM_CHAT_ID]
+): Promise<TelegramSendResult> {
+  const msg = formatKillZoneTelegram(zoneType, true);
+  return sendTelegramMultiTarget(token, targetIds, msg);
+}
+
+/**
+ * Broadcasts Weekend Market Close or Open Status to Telegram
+ */
+export async function sendWeekendStatusToTelegram(
+  statusType: 'CLOSE_ALERT' | 'CLOSED_WEEKEND' | 'OPEN_ALERT',
+  token: string = DEFAULT_TELEGRAM_TOKEN,
+  targetIds: string[] | string = [DEFAULT_TELEGRAM_CHANNEL_ID, DEFAULT_TELEGRAM_CHAT_ID]
+): Promise<TelegramSendResult> {
+  const msg = formatWeekendStatusTelegram(statusType, true);
+  return sendTelegramMultiTarget(token, targetIds, msg);
+}
+
+/**
+ * Broadcasts High-Impact Economic Decision Alert to Telegram
+ */
+export async function sendEconomicDecisionAlertToTelegram(
+  event: EconomicDecisionEvent,
+  token: string = DEFAULT_TELEGRAM_TOKEN,
+  targetIds: string[] | string = [DEFAULT_TELEGRAM_CHANNEL_ID, DEFAULT_TELEGRAM_CHAT_ID]
+): Promise<TelegramSendResult> {
+  const msg = formatEconomicDecisionTelegram(event, true);
+  return sendTelegramMultiTarget(token, targetIds, msg);
+}
+
+/**
+ * Broadcasts Daily Full Market Brief (Sessions & Key Hours) to Telegram
+ */
+export async function sendDailyMarketBriefToTelegram(
+  token: string = DEFAULT_TELEGRAM_TOKEN,
+  targetIds: string[] | string = [DEFAULT_TELEGRAM_CHANNEL_ID, DEFAULT_TELEGRAM_CHAT_ID]
+): Promise<TelegramSendResult> {
+  const msg = formatDailyMarketBriefTelegram(true);
   return sendTelegramMultiTarget(token, targetIds, msg);
 }
 

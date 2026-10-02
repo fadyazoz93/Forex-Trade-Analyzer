@@ -20,8 +20,20 @@ import {
   sendTargetHitToTelegram,
   sendStopLossHitToTelegram,
   sendBreakevenToTelegram,
+  sendSessionAlertToTelegram,
+  sendKillZoneAlertToTelegram,
+  sendWeekendStatusToTelegram,
+  sendEconomicDecisionAlertToTelegram,
+  sendDailyMarketBriefToTelegram,
   testTelegramConnection,
 } from './src/services/telegramService';
+import {
+  SESSIONS_LIST,
+  MAJOR_ECONOMIC_DECISIONS,
+  getMarketHoursStatus,
+  MarketSessionDetail,
+  EconomicDecisionEvent,
+} from './src/services/marketHoursService';
 import { TARGET_SYMBOLS } from './src/data/symbols';
 import { isWeekendMarketClosed } from './src/services/shieldMonitor';
 import {
@@ -206,15 +218,119 @@ function trackActiveSignalsLifeCycle() {
     // 5. Check SL Hit
     if ((updated.status as string) === 'SL_HIT' && !events.has('SL')) {
       events.add('SL');
-      console.log(`🛑 [Railway 24/7 Worker] Stop Loss Hit for ${sig.symbol}. Broadcasting transparency update to Telegram...`);
+      console.log(`🛑 [Railway 24/7 Worker] Stop Loss hit for ${sig.symbol}. Telegram SL notification silenced per user instructions.`);
       // Enforce post-SL cooldown: reset cooldown timestamp so no new trade can open on this currency immediately
       recordDispatchedSignal(sig);
       saveTradeSignalToDb(sig).catch(() => {});
-      if (AUTO_SEND) {
-        sendStopLossHitToTelegram(sig, sig.livePips || 0, BOT_TOKEN, [CHANNEL_ID]).catch((err) =>
-          console.warn('Telegram SL broadcast error:', err)
-        );
+      // Notice: Stop Loss Telegram broadcasts are permanently cancelled and suppressed per user request.
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 24/7 Market Sessions, Golden Windows & Decisions Scheduler
+// ─────────────────────────────────────────────────────────────
+const sentSessionEventsToday = new Set<string>();
+
+async function checkAndDispatchMarketSessionAlerts() {
+  if (!AUTO_SEND) return;
+  const now = new Date();
+  const utcDay = now.getUTCDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
+  const utcHour = now.getUTCHours();
+  const utcMin = now.getUTCMinutes();
+  const dateKey = now.toISOString().split('T')[0];
+
+  // Reset daily tracker at midnight UTC
+  if (utcHour === 0 && utcMin < 2) {
+    sentSessionEventsToday.clear();
+  }
+
+  // 1. Friday Weekend Close Warning (Friday 21:00 UTC / 12:00 midnight Mecca)
+  if (utcDay === 5 && utcHour === 21 && utcMin < 10) {
+    const key = `WEEKEND_CLOSE_${dateKey}`;
+    if (!sentSessionEventsToday.has(key)) {
+      sentSessionEventsToday.add(key);
+      console.log('📢 [Railway 24/7 Worker] Dispatching Weekend Market Close notification to Telegram...');
+      await sendWeekendStatusToTelegram('CLOSE_ALERT', BOT_TOKEN, [CHANNEL_ID]);
+    }
+    return;
+  }
+
+  // 2. Sunday Weekend Open Alert (Sunday 21:00 UTC / 12:00 midnight Mecca)
+  if (utcDay === 0 && utcHour === 21 && utcMin < 10) {
+    const key = `WEEKEND_OPEN_${dateKey}`;
+    if (!sentSessionEventsToday.has(key)) {
+      sentSessionEventsToday.add(key);
+      console.log('📢 [Railway 24/7 Worker] Dispatching Weekly Market Open notification to Telegram...');
+      await sendWeekendStatusToTelegram('OPEN_ALERT', BOT_TOKEN, [CHANNEL_ID]);
+    }
+    return;
+  }
+
+  // If weekend, skip intraday sessions
+  if (utcDay === 6 || (utcDay === 0 && utcHour < 21) || (utcDay === 5 && utcHour >= 21)) {
+    return;
+  }
+
+  // 3. Tokyo Session Open (00:00 UTC / 03:00 Mecca)
+  if (utcHour === 0 && utcMin < 10) {
+    const key = `TOKYO_OPEN_${dateKey}`;
+    if (!sentSessionEventsToday.has(key)) {
+      sentSessionEventsToday.add(key);
+      const tokyo = SESSIONS_LIST.find((s) => s.id === 'tokyo');
+      if (tokyo) {
+        console.log('📢 [Railway 24/7 Worker] Dispatching Tokyo Session Open notification...');
+        await sendSessionAlertToTelegram(tokyo, 'OPEN', BOT_TOKEN, [CHANNEL_ID]);
       }
+    }
+  }
+
+  // 4. London Session Open (07:00 UTC / 10:00 Mecca) & London Open Kill Zone
+  if (utcHour === 7 && utcMin < 10) {
+    const key = `LONDON_OPEN_${dateKey}`;
+    if (!sentSessionEventsToday.has(key)) {
+      sentSessionEventsToday.add(key);
+      const london = SESSIONS_LIST.find((s) => s.id === 'london');
+      if (london) {
+        console.log('📢 [Railway 24/7 Worker] Dispatching London Session Open notification...');
+        await sendSessionAlertToTelegram(london, 'OPEN', BOT_TOKEN, [CHANNEL_ID]);
+      }
+      setTimeout(() => {
+        sendKillZoneAlertToTelegram('LONDON_OPEN', BOT_TOKEN, [CHANNEL_ID]).catch(() => {});
+      }, 5000);
+    }
+  }
+
+  // 5. London - New York Golden Overlap (12:30 UTC / 15:30 Mecca)
+  if (utcHour === 12 && utcMin >= 30 && utcMin < 40) {
+    const key = `GOLDEN_OVERLAP_${dateKey}`;
+    if (!sentSessionEventsToday.has(key)) {
+      sentSessionEventsToday.add(key);
+      console.log('📢 [Railway 24/7 Worker] Dispatching Golden Overlap Kill Zone notification...');
+      await sendKillZoneAlertToTelegram('OVERLAP', BOT_TOKEN, [CHANNEL_ID]);
+    }
+  }
+
+  // 6. London Session Close (16:00 UTC / 19:00 Mecca)
+  if (utcHour === 16 && utcMin < 10) {
+    const key = `LONDON_CLOSE_${dateKey}`;
+    if (!sentSessionEventsToday.has(key)) {
+      sentSessionEventsToday.add(key);
+      const london = SESSIONS_LIST.find((s) => s.id === 'london');
+      if (london) {
+        console.log('📢 [Railway 24/7 Worker] Dispatching London Session Close notification...');
+        await sendSessionAlertToTelegram(london, 'CLOSE', BOT_TOKEN, [CHANNEL_ID]);
+      }
+    }
+  }
+
+  // 7. Daily Rollover & Spread Warning (21:00 UTC / 12:00 midnight Mecca) on Mon-Thu
+  if (utcHour === 21 && utcMin < 10 && utcDay !== 5) {
+    const key = `ROLLOVER_WARN_${dateKey}`;
+    if (!sentSessionEventsToday.has(key)) {
+      sentSessionEventsToday.add(key);
+      console.log('📢 [Railway 24/7 Worker] Dispatching Daily Rollover warning notification...');
+      await sendKillZoneAlertToTelegram('ROLLOVER', BOT_TOKEN, [CHANNEL_ID]);
     }
   }
 }
@@ -254,6 +370,13 @@ async function start24x7BackgroundScanner() {
       console.warn('⚠️ [Signal Tracking] Error in life-cycle loop:', err);
     }
   }, 3000);
+
+  // Check and dispatch market sessions, golden windows, and weekend alerts every 30 seconds
+  setInterval(() => {
+    checkAndDispatchMarketSessionAlerts().catch((err) =>
+      console.warn('⚠️ [Market Sessions] Alert dispatch error:', err)
+    );
+  }, 30000);
 
   // Core strategy scan interval (runs every 6 seconds 24/7)
   setInterval(async () => {
@@ -421,13 +544,67 @@ app.post('/api/signals/notify-update', async (req, res) => {
     if (updateType === 'TP1' || updateType === 'TP2' || updateType === 'TP3' || updateType === 'TP4') {
       result = await sendTargetHitToTelegram(signal, updateType, pips || signal.livePips || 0, BOT_TOKEN, [CHANNEL_ID]);
     } else if (updateType === 'SL') {
-      result = await sendStopLossHitToTelegram(signal, pips || signal.livePips || 0, BOT_TOKEN, [CHANNEL_ID]);
+      // SL messages permanently disabled per user instructions
+      return res.json({ success: true, message: 'تم إيقاف إرسال رسائل ضرب وقف الخسارة إلى تليجرام بناءً على طلبك.' });
     } else if (updateType === 'BREAKEVEN') {
       result = await sendBreakevenToTelegram(signal, BOT_TOKEN, [CHANNEL_ID]);
     } else if (updateType === 'NEW_SIGNAL') {
       result = await sendTradeSignalToTelegram(signal, BOT_TOKEN, [CHANNEL_ID]);
     } else {
       return res.status(400).json({ success: false, error: 'نوع التحديث غير صالح' });
+    }
+
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Market Sessions Status & High-Impact Events endpoint
+app.get('/api/market-sessions', (req, res) => {
+  try {
+    const status = getMarketHoursStatus();
+    res.json({
+      success: true,
+      sessions: SESSIONS_LIST,
+      status,
+      economicDecisions: MAJOR_ECONOMIC_DECISIONS,
+      timestamp: Date.now(),
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Manual broadcast of Market Session, Kill Zone, or Economic Decision alert to Telegram
+app.post('/api/telegram/broadcast-market-update', async (req, res) => {
+  try {
+    const { updateType, id } = req.body;
+    const targets = [CHANNEL_ID];
+    let result;
+
+    if (updateType === 'SESSION_OPEN') {
+      const session = SESSIONS_LIST.find((s) => s.id === id) || SESSIONS_LIST[1];
+      result = await sendSessionAlertToTelegram(session, 'OPEN', BOT_TOKEN, targets);
+    } else if (updateType === 'SESSION_CLOSE') {
+      const session = SESSIONS_LIST.find((s) => s.id === id) || SESSIONS_LIST[2];
+      result = await sendSessionAlertToTelegram(session, 'CLOSE', BOT_TOKEN, targets);
+    } else if (updateType === 'KILLZONE') {
+      const zone = (id as 'LONDON_OPEN' | 'OVERLAP' | 'ROLLOVER') || 'OVERLAP';
+      result = await sendKillZoneAlertToTelegram(zone, BOT_TOKEN, targets);
+    } else if (updateType === 'WEEKEND_CLOSE') {
+      result = await sendWeekendStatusToTelegram('CLOSE_ALERT', BOT_TOKEN, targets);
+    } else if (updateType === 'WEEKEND_OPEN') {
+      result = await sendWeekendStatusToTelegram('OPEN_ALERT', BOT_TOKEN, targets);
+    } else if (updateType === 'ECONOMIC_DECISION') {
+      const event = MAJOR_ECONOMIC_DECISIONS.find((e) => e.id === id) || MAJOR_ECONOMIC_DECISIONS[0];
+      result = await sendEconomicDecisionAlertToTelegram(event, BOT_TOKEN, targets);
+    } else if (updateType === 'DAILY_BRIEF') {
+      result = await sendDailyMarketBriefToTelegram(BOT_TOKEN, targets);
+    } else {
+      return res.status(400).json({ success: false, error: 'نوع التحديث المطلوب غير صالح' });
     }
 
     res.json(result);

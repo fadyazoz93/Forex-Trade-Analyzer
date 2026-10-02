@@ -232,14 +232,14 @@ export const TelegramModal: React.FC<TelegramModalProps> = ({
             </div>
           )}
 
-          {/* Noise Reduction Feature Badge */}
+          {/* Noise Reduction & SL Elimination Feature Badge */}
           <div className="p-3.5 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 text-xs text-emerald-200 space-y-1.5">
             <div className="flex items-center gap-2 font-bold text-emerald-300">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>نظام تقليل الضوضاء ومنع الإزعاج (Zero-Noise Mode):</span>
+              <span>نظام التنبيهات المعتمد (إلغاء رسائل ضرب الوقف):</span>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              تم إلغاء الرسائل الوسيطة المتكررة (TP2 / TP3) واقتصار البث حصراً على المحطات المحورية: <b>إشارة الدخول</b> ⬅️ <b>تحقيق الهدف 1 وتأمين الصفقة (TP1 + BE)</b> ⬅️ <b>الهدف النهائي (TP4)</b> أو <b>ضرب الوقف</b>، لحماية أعضاء القناة من كثرة الإشعارات.
+              ✅ <b>تم إلغاء رسائل ضرب وقف الخسارة (SL) نهائياً من القناة</b>، واستبدالها بإشعارات ذات قيمة مضافة عالية: <b>افتتاح وإغلاق الجلسات المالية</b>، <b>الفترة الذهبية للتداول (London-NY Overlap)</b>، <b>تنبيهات مواعيد القرارات والأخبار الاقتصادية الكبرى (FOMC / NFP / CPI)</b>، و<b>إغلاق وافتتاح السوق الأسبوعي</b>.
             </p>
           </div>
 

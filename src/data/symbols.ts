@@ -61,7 +61,7 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     digits: 5,
     point: 0.00001,
     typicalSpreadPts: 12,
-    initialPrice: 1.13430,
+    initialPrice: 1.12580,
     volatilityAtr: 0.00680,
     minLot: 0.01,
     maxLot: 10.0,

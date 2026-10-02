@@ -507,3 +507,398 @@ export function formatUtcToLocalHour(utcHour: number): string {
   d.setUTCHours(utcHour, 0, 0, 0);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
+
+// ─────────────────────────────────────────────────────────────
+// Major Central Bank Decisions & High-Impact Economic Events
+// ─────────────────────────────────────────────────────────────
+export interface EconomicDecisionEvent {
+  id: string;
+  titleAr: string;
+  titleEn: string;
+  sourceAr: string;
+  country: string;
+  flag: string;
+  currency: 'USD' | 'EUR' | 'GBP' | 'JPY' | 'ALL';
+  impact: 'EXTREME' | 'HIGH';
+  timeScheduleAr: string;
+  affectedAssets: string[];
+  guidanceAr: string;
+  keyMetricsAr: string;
+}
+
+export const MAJOR_ECONOMIC_DECISIONS: EconomicDecisionEvent[] = [
+  {
+    id: 'fomc-rate-decision',
+    titleAr: 'قرار الفائدة الفيدرالية الأمريكية ومؤتمر جيروم باول (FOMC)',
+    titleEn: 'Federal Reserve FOMC Interest Rate Decision & Press Conference',
+    sourceAr: 'البنك الاحتياطي الفيدرالي الأمريكي',
+    country: 'الولايات المتحدة',
+    flag: '🇺🇸',
+    currency: 'USD',
+    impact: 'EXTREME',
+    timeScheduleAr: 'الأربعاء (كل 6 أسابيع) • 09:00 م بتوقيت مكة (18:00 UTC) والمؤتمر 09:30 م',
+    affectedAssets: ['XAU/USD (الذهب)', 'EUR/USD', 'USD/JPY', 'مؤشر الدولار DXY'],
+    guidanceAr: 'أقوى حدث محرك للأسواق عالمياً. يُنصح بعدم فتح عقود جديدة قبل المؤتمر بـ 30 دقيقة ونقل الوقف على الدخول (BE) للصفقات الرابحة.',
+    keyMetricsAr: 'معدل الفائدة، بيان السياسة النقدية، المخطط النقطي Dot Plot، تلميحات التضخم والركود.',
+  },
+  {
+    id: 'us-nfp-jobs',
+    titleAr: 'تقرير الوظائف الأمريكية غير الزراعية ومعدل البطالة (US NFP)',
+    titleEn: 'Non-Farm Payrolls (NFP) & Unemployment Rate',
+    sourceAr: 'مكتب إحصاءات العمل الأمريكي (BLS)',
+    country: 'الولايات المتحدة',
+    flag: '🇺🇸',
+    currency: 'USD',
+    impact: 'EXTREME',
+    timeScheduleAr: 'أول جمعة من كل شهر ميلادي • 03:30 م بتوقيت مكة (12:30 UTC)',
+    affectedAssets: ['XAU/USD (الذهب)', 'EUR/USD', 'GBP/JPY', 'USD/JPY'],
+    guidanceAr: 'تحدث حركة انفجارية خلال أول 15 دقيقة تفوق 80-150 نقطة في الذهب. تجنب الدخول العشوائي وانتظر حتى تهدأ الشموع وتتضح اتجاهات وايكوف.',
+    keyMetricsAr: 'صافي الوظائف المضافة، معدل البطالة الرسمي، متوسط الأجور في الساعة (مقياس التضخم).',
+  },
+  {
+    id: 'us-cpi-inflation',
+    titleAr: 'مؤشر أسعار المستهلك الأمريكي والتضخم السنوي (US CPI)',
+    titleEn: 'US Consumer Price Index (CPI) Inflation Report',
+    sourceAr: 'مكتب إحصاءات العمل الأمريكي (BLS)',
+    country: 'الولايات المتحدة',
+    flag: '🇺🇸',
+    currency: 'USD',
+    impact: 'EXTREME',
+    timeScheduleAr: 'منتصف كل شهر (شهرياً) • 03:30 م بتوقيت مكة (12:30 UTC)',
+    affectedAssets: ['XAU/USD (الذهب)', 'EUR/USD', 'USD/JPY'],
+    guidanceAr: 'المحرك الأول لقرارات الفائدة. صدور نتيجة أعلى من التوقعات تدعم الدولار وتضغط على الذهب، والعكس صحيح.',
+    keyMetricsAr: 'معدل التضخم السنوي، التضخم الأساسي Core CPI المستثنى منه الغذاء والطاقة.',
+  },
+  {
+    id: 'ecb-rate-decision',
+    titleAr: 'قرار الفائدة للبنك المركزي الأوروبي ومؤتمر كريستين لاغارد (ECB)',
+    titleEn: 'European Central Bank (ECB) Rate Decision & Press Conference',
+    sourceAr: 'البنك المركزي الأوروبي',
+    country: 'منطقة اليورو',
+    flag: '🇪🇺',
+    currency: 'EUR',
+    impact: 'HIGH',
+    timeScheduleAr: 'الخميس (كل 6 أسابيع) • 03:15 م بتوقيت مكة (12:15 UTC)',
+    affectedAssets: ['EUR/USD', 'EUR/GBP', 'EUR/JPY'],
+    guidanceAr: 'تقلبات حادة لليورو، ترقب تلميحات خفض أو رفع الفائدة وتوقعات النمو الاقتصادي لمنطقة اليورو.',
+    keyMetricsAr: 'معدل الفائدة على الإيداع وإعادة التمويل، توقعات التضخم الأوروبية.',
+  },
+  {
+    id: 'boe-rate-decision',
+    titleAr: 'قرار الفائدة لبنك إنجلترا المركزي ومحضر السياسة النقدية (BOE)',
+    titleEn: 'Bank of England (BOE) Official Bank Rate & Minutes',
+    sourceAr: 'بنك إنجلترا المركزي',
+    country: 'المملكة المتحدة',
+    flag: '🇬🇧',
+    currency: 'GBP',
+    impact: 'HIGH',
+    timeScheduleAr: 'الخميس (كل 6 أسابيع) • 02:00 م بتوقيت مكة (11:00 UTC)',
+    affectedAssets: ['GBP/JPY', 'EUR/GBP', 'GBP/USD'],
+    guidanceAr: 'زوج الباوند ين (المجنون) يتحرك بأكثر من 100-200 نقطة. يُرجى الالتزام الصارم بإدارة المخاطر واللوت الآمن.',
+    keyMetricsAr: 'أصوات أعضاء لجنة السياسة النقدية (MPC Vote Split)، تقرير التضخم الفصلي.',
+  },
+  {
+    id: 'boj-rate-decision',
+    titleAr: 'قرار السياسة النقدية لبنك اليابان والتحكم في منحنى العائد (BOJ)',
+    titleEn: 'Bank of Japan (BOJ) Monetary Policy & Yield Curve Control',
+    sourceAr: 'بنك اليابان المركزي',
+    country: 'اليابان',
+    flag: '🇯🇵',
+    currency: 'JPY',
+    impact: 'EXTREME',
+    timeScheduleAr: 'خلال الجلسة الآسيوية المبكرة (بين 05:00 ص و 07:00 ص بتوقيت مكة)',
+    affectedAssets: ['USD/JPY', 'GBP/JPY', 'EUR/JPY'],
+    guidanceAr: 'قرارات مفاجئة قد تحدث قفزات ضخمة في الين وتدخلات بنك اليابان لدعم الين. مراقبة مستويات 200 EMA عن كثب.',
+    keyMetricsAr: 'تغيير الفائدة السلبية/الموجبة، مستويات شراء السندات وتدخلات سوق الصرف.',
+  },
+  {
+    id: 'us-core-pce',
+    titleAr: 'مؤشر أسعار نفقات الاستهلاك الشخصي الأمريكي (Core PCE)',
+    titleEn: 'US Core PCE Price Index',
+    sourceAr: 'مكتب التحليل الاقتصادي الأمريكي (BEA)',
+    country: 'الولايات المتحدة',
+    flag: '🇺🇸',
+    currency: 'USD',
+    impact: 'HIGH',
+    timeScheduleAr: 'آخر جمعة من كل شهر • 03:30 م بتوقيت مكة (12:30 UTC)',
+    affectedAssets: ['XAU/USD', 'EUR/USD', 'USD/JPY'],
+    guidanceAr: 'المقياس المفضل والمباشر للفيدرالي الأمريكي لمراقبة التضخم الفعلي للمستهلكين.',
+    keyMetricsAr: 'النسبة الشهرية والسنوية للتضخم الأساسي.',
+  },
+];
+
+// ─────────────────────────────────────────────────────────────
+// Telegram Formatting Helpers for Sessions & Market Timing
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Format Market Session Opening or Closing Telegram message
+ */
+export function formatSessionAlertTelegram(
+  session: MarketSessionDetail,
+  eventType: 'OPEN' | 'CLOSE',
+  forHtml = true
+): string {
+  const isOpen = eventType === 'OPEN';
+  const meccaOpenHour = (session.openUtcHour + 3) % 24;
+  const meccaCloseHour = (session.closeUtcHour + 3) % 24;
+  const meccaOpenStr = `${String(meccaOpenHour).padStart(2, '0')}:00`;
+  const meccaCloseStr = `${String(meccaCloseHour).padStart(2, '0')}:00`;
+
+  if (isOpen) {
+    if (forHtml) {
+      return [
+        `🏛️ <b>افتتاح جلسة ${session.city} المالية (${session.nameEn}) ${session.flag}</b>`,
+        `─────────────────`,
+        `⏰ <b>التوقيت:</b> <code>${meccaOpenStr}</code> بتوقيت مكة المكرمة (${String(session.openUtcHour).padStart(2, '0')}:00 UTC)`,
+        `📊 <b>مستوى السيولة:</b> <b>${session.liquidity}</b> 🔥`,
+        `🎯 <b>أهم الأصول النشطة:</b> ${session.bestSymbols.join(' | ')}`,
+        `💡 <b>التوجيه المؤسسي:</b>`,
+        `• ${session.descriptionAr}`,
+        `• توافق تحركات وايكوف وكسر الهياكل السعرية المعتمدة لنظام Gann SOP.`,
+      ].join('\n');
+    }
+    return [
+      `🏛️ افتتاح جلسة ${session.city} المالية (${session.nameEn}) ${session.flag}`,
+      `─────────────────`,
+      `⏰ التوقيت: ${meccaOpenStr} بتوقيت مكة المكرمة (${String(session.openUtcHour).padStart(2, '0')}:00 UTC)`,
+      `📊 مستوى السيولة: ${session.liquidity} 🔥`,
+      `🎯 أهم الأصول النشطة: ${session.bestSymbols.join(' | ')}`,
+      `💡 التوجيه المؤسسي:`,
+      `• ${session.descriptionAr}`,
+      `• توافق تحركات وايكوف وكسر الهياكل السعرية المعتمدة لنظام Gann SOP.`,
+    ].join('\n');
+  }
+
+  // CLOSE
+  if (forHtml) {
+    return [
+      `🏁 <b>إغلاق جلسة ${session.city} (${session.nameEn}) ${session.flag}</b>`,
+      `─────────────────`,
+      `⏰ <b>التوقيت:</b> <code>${meccaCloseStr}</code> بتوقيت مكة المكرمة (${String(session.closeUtcHour).padStart(2, '0')}:00 UTC)`,
+      `📉 <b>حالة السوق:</b> انحسار تدريجي في تدفقات البنوك التابعة لـ ${session.city}`,
+      `🔒 <b>نصيحة إدارة المخاطر:</b> تأمين الأرباح المتبقية والاعتماد على الوقف المتحرك لحماية رأس المال.`,
+    ].join('\n');
+  }
+  return [
+    `🏁 إغلاق جلسة ${session.city} (${session.nameEn}) ${session.flag}`,
+    `─────────────────`,
+    `⏰ التوقيت: ${meccaCloseStr} بتوقيت مكة المكرمة (${String(session.closeUtcHour).padStart(2, '0')}:00 UTC)`,
+    `📉 حالة السوق: انحسار تدريجي في تدفقات البنوك التابعة لـ ${session.city}`,
+    `🔒 نصيحة إدارة المخاطر: تأمين الأرباح المتبقية والاعتماد على الوقف المتحرك لحماية رأس المال.`,
+  ].join('\n');
+}
+
+/**
+ * Format Best Trading Windows (Kill Zones) Telegram message
+ */
+export function formatKillZoneTelegram(
+  zoneType: 'LONDON_OPEN' | 'OVERLAP' | 'ROLLOVER',
+  forHtml = true
+): string {
+  if (zoneType === 'OVERLAP') {
+    if (forHtml) {
+      return [
+        `⚡ <b>بدء فترة التداول الذهبية (London - NY Overlap) 🔥</b>`,
+        `─────────────────`,
+        `⏰ <b>التوقيت:</b> <code>03:00 م - 07:00 م</code> بتوقيت مكة المكرمة (12:00 - 16:00 UTC)`,
+        `🏆 <b>الميزة الاستراتيجية:</b>`,
+        `• <b>أعلى ذروة سيولة يومية عالمية</b> (تمثل أكثر من 65% من حجم التداول العالمي للفوركس والمعادن).`,
+        `• تداخل صناع السوق في لندن مع بنوك وول ستريت في نيويورك.`,
+        `🎯 <b>أفضل الأصول تداولاً:</b> <b>الذهب XAU/USD</b> | <b>اليورو دولار EUR/USD</b> | <b>الباوند ين GBP/JPY</b>`,
+        `🎯 <b>التوجيه الفني:</b> التوقيت الأمثل لتحقيق أهداف Quad Targets وكسر زوايا مربع التسعة 1x1.`,
+      ].join('\n');
+    }
+    return [
+      `⚡ بدء فترة التداول الذهبية (London - NY Overlap) 🔥`,
+      `─────────────────`,
+      `⏰ التوقيت: 03:00 م - 07:00 م بتوقيت مكة المكرمة (12:00 - 16:00 UTC)`,
+      `🏆 الميزة الاستراتيجية:`,
+      `• أعلى ذروة سيولة يومية عالمية (تمثل أكثر من 65% من حجم التداول العالمي للفوركس والمعادن).`,
+      `• تداخل صناع السوق في لندن مع بنوك وول ستريت في نيويورك.`,
+      `🎯 أفضل الأصول تداولاً: الذهب XAU/USD | اليورو دولار EUR/USD | الباوند ين GBP/JPY`,
+      `🎯 التوجيه الفني: التوقيت الأمثل لتحقيق أهداف Quad Targets وكسر زوايا مربع التسعة 1x1.`,
+    ].join('\n');
+  }
+
+  if (zoneType === 'LONDON_OPEN') {
+    if (forHtml) {
+      return [
+        `⚡ <b>فترة كسر نطاق آسيا الصباحي (London Open Kill Zone) 🇬🇧</b>`,
+        `─────────────────`,
+        `⏰ <b>التوقيت:</b> <code>10:00 ص - 01:00 م</code> بتوقيت مكة المكرمة (07:00 - 10:00 UTC)`,
+        `🎯 <b>أهم النماذج المتوقعة:</b> كسر السيولة الصباحية، وتكوين قاع أو قمة اليوم الحقيقي (Judas Swing).`,
+        `📊 <b>الأزواج المفضلة:</b> <b>EUR/USD</b> | <b>GBP/JPY</b>`,
+        `💡 <b>التوجيه الفني:</b> مراقبة تطابق 200 EMA واختبار مستويات زوايا جان لركوب الموجة الاتجاهية.`,
+      ].join('\n');
+    }
+    return [
+      `⚡ فترة كسر نطاق آسيا الصباحي (London Open Kill Zone) 🇬🇧`,
+      `─────────────────`,
+      `⏰ التوقيت: 10:00 ص - 01:00 م بتوقيت مكة المكرمة (07:00 - 10:00 UTC)`,
+      `🎯 أهم النماذج المتوقعة: كسر السيولة الصباحية، وتكوين قاع أو قمة اليوم الحقيقي (Judas Swing).`,
+      `📊 الأزواج المفضلة: EUR/USD | GBP/JPY`,
+      `💡 التوجيه الفني: مراقبة تطابق 200 EMA واختبار مستويات زوايا جان لركوب الموجة الاتجاهية.`,
+    ].join('\n');
+  }
+
+  // ROLLOVER / DEAD ZONE WARNING
+  if (forHtml) {
+    return [
+      `⚠️ <b>تحذير فترة الركود وتدوير العقود اليومي (Daily Rollover Alert) 🌙</b>`,
+      `─────────────────`,
+      `⏰ <b>التوقيت:</b> <code>12:00 منتصف الليل - 01:00 ص</code> بتوقيت مكة المكرمة (21:00 - 22:00 UTC)`,
+      `🛑 <b>مخاطر هذه الفترة:</b>`,
+      `• اتساع فوارق الأسعار (Spread Spikes) بشكل مفاجئ لدى أغلب شركات الوساطة.`,
+      `• انخفاض السيولة اللحظية بين إغلاق نيويورك وقبل انطلاق جلسة طوكيو الكاملة.`,
+      `🛡️ <b>التوصية الصارمة:</b> تجنب فتح صفقات جديدة خلال هذه الساعة لتفادي الانزلاقات السعرية وعمولات السواب.`,
+    ].join('\n');
+  }
+  return [
+    `⚠️ تحذير فترة الركود وتدوير العقود اليومي (Daily Rollover Alert) 🌙`,
+    `─────────────────`,
+    `⏰ التوقيت: 12:00 منتصف الليل - 01:00 ص بتوقيت مكة المكرمة (21:00 - 22:00 UTC)`,
+    `🛑 مخاطر هذه الفترة:`,
+    `• اتساع فوارق الأسعار (Spread Spikes) بشكل مفاجئ لدى أغلب شركات الوساطة.`,
+    `• انخفاض السيولة اللحظية بين إغلاق نيويورك وقبل انطلاق جلسة طوكيو الكاملة.`,
+    `🛡️ التوصية الصارمة: تجنب فتح صفقات جديدة خلال هذه الساعة لتفادي الانزلاقات السعرية وعمولات السواب.`,
+  ].join('\n');
+}
+
+/**
+ * Format Weekend Market Close or Open Telegram message
+ */
+export function formatWeekendStatusTelegram(
+  statusType: 'CLOSE_ALERT' | 'CLOSED_WEEKEND' | 'OPEN_ALERT',
+  forHtml = true
+): string {
+  if (statusType === 'CLOSE_ALERT') {
+    if (forHtml) {
+      return [
+        `🛑 <b>إغلاق السوق المالي الأسبوعي (Weekend Market Close) 🔒</b>`,
+        `─────────────────`,
+        `⏰ <b>التوقيت:</b> الجمعة <code>12:00 منتصف الليل</code> بتوقيت مكة المكرمة (21:00 UTC)`,
+        `🏖️ <b>حالة السوق:</b> أغلقت أسواق الفوركس والمعادن والأسهم العالمية رسمياً حتى مساء الأحد.`,
+        `💡 <b>قواعد إدارة رأس المال:</b>`,
+        `• تم إيقاف توليد إشارات التداول آلياً لحماية الحساب من الفجوات السعرية (Weekend Gaps).`,
+        `• يُنصح دائماً بعدم تبييت صفقات عالية المخاطرة خلال العطلة الأسبوعية.`,
+        `🌴 <i>نتمنى لكم عطلة أسبوع سعيدة وموفقة!</i>`,
+      ].join('\n');
+    }
+    return [
+      `🛑 إغلاق السوق المالي الأسبوعي (Weekend Market Close) 🔒`,
+      `─────────────────`,
+      `⏰ التوقيت: الجمعة 12:00 منتصف الليل بتوقيت مكة المكرمة (21:00 UTC)`,
+      `🏖️ حالة السوق: أغلقت أسواق الفوركس والمعادن والأسهم العالمية رسمياً حتى مساء الأحد.`,
+      `💡 قواعد إدارة رأس المال:`,
+      `• تم إيقاف توليد إشارات التداول آلياً لحماية الحساب من الفجوات السعرية (Weekend Gaps).`,
+      `• يُنصح دائماً بعدم تبييت صفقات عالية المخاطرة خلال العطلة الأسبوعية.`,
+      `🌴 نتمنى لكم عطلة أسبوع سعيدة وموفقة!`,
+    ].join('\n');
+  }
+
+  // OPEN_ALERT
+  if (forHtml) {
+    return [
+      `🟢 <b>افتتاح أسبوع التداول الجديد (Weekly Market Open) 🚀</b>`,
+      `─────────────────`,
+      `⏰ <b>التوقيت:</b> الأحد <code>12:00 منتصف الليل</code> بتوقيت مكة المكرمة (21:00 UTC)`,
+      `📈 <b>بداية الجلسات:</b> افتتاح جلستي سيدني وطوكيو وتدفق السيولة الآسيوية تدريجياً.`,
+      `🎯 <b>التوجيه الأسبوعي:</b>`,
+      `• مراقبة أي فجوات سعرية (Gaps) نتجت عن الأخبار السياسية أو الاقتصادية خلال العطلة.`,
+      `• تفعيل مصفوفة فحص جان ووايكوف للبحث عن أفضل الفرص ذات التوافق العالي (Score 4/5 و 5/5).`,
+      `💼 <i>أسبوع تداول مليء بالأرباح والتوفيق للجميع!</i>`,
+    ].join('\n');
+  }
+  return [
+    `🟢 افتتاح أسبوع التداول الجديد (Weekly Market Open) 🚀`,
+    `─────────────────`,
+    `⏰ التوقيت: الأحد 12:00 منتصف الليل بتوقيت مكة المكرمة (21:00 UTC)`,
+    `📈 بداية الجلسات: افتتاح جلستي سيدني وطوكيو وتدفق السيولة الآسيوية تدريجياً.`,
+    `🎯 التوجيه الأسبوعي:`,
+    `• مراقبة أي فجوات سعرية (Gaps) نتجت عن الأخبار السياسية أو الاقتصادية خلال العطلة.`,
+    `• تفعيل مصفوفة فحص جان ووايكوف للبحث عن أفضل الفرص ذات التوافق العالي (Score 4/5 و 5/5).`,
+    `💼 أسبوع تداول مليء بالأرباح والتوفيق للجميع!`,
+  ].join('\n');
+}
+
+/**
+ * Format High-Impact Economic Decision Alert Telegram message
+ */
+export function formatEconomicDecisionTelegram(
+  event: EconomicDecisionEvent,
+  forHtml = true
+): string {
+  if (forHtml) {
+    return [
+      `🚨 <b>تنبيه قرار اقتصادي عالي التأثير (High Impact Event) ${event.flag}</b>`,
+      `─────────────────`,
+      `📊 <b>الحدث:</b> <b>${event.titleAr}</b>`,
+      `🏛️ <b>المصدر:</b> ${event.sourceAr} (${event.country})`,
+      `⏰ <b>الموعد المعتاد:</b> <code>${event.timeScheduleAr}</code>`,
+      `🎯 <b>الأصول الأكثر تأثراً:</b> ${event.affectedAssets.join(' | ')}`,
+      `⚡ <b>مستوى الحذر:</b> <b>${event.impact === 'EXTREME' ? 'شديد الخطورة ⚠️' : 'عالي التأثير 🔥'}</b>`,
+      `─────────────────`,
+      `💡 <b>التوجيه الاحترازي:</b>`,
+      `• ${event.guidanceAr}`,
+      `• <b>أهم المؤشرات المراقبة:</b> ${event.keyMetricsAr}`,
+    ].join('\n');
+  }
+
+  return [
+    `🚨 تنبيه قرار اقتصادي عالي التأثير (High Impact Event) ${event.flag}`,
+    `─────────────────`,
+    `📊 الحدث: ${event.titleAr}`,
+    `🏛️ المصدر: ${event.sourceAr} (${event.country})`,
+    `⏰ الموعد المعتاد: ${event.timeScheduleAr}`,
+    `🎯 الأصول الأكثر تأثراً: ${event.affectedAssets.join(' | ')}`,
+    `⚡ مستوى الحذر: ${event.impact === 'EXTREME' ? 'شديد الخطورة ⚠️' : 'عالي التأثير 🔥'}`,
+    `─────────────────`,
+    `💡 التوجيه الاحترازي:`,
+    `• ${event.guidanceAr}`,
+    `• أهم المؤشرات المراقبة: ${event.keyMetricsAr}`,
+  ].join('\n');
+}
+
+/**
+ * Format Full Daily Market Brief (Sessions, Golden Windows & Calendar)
+ */
+export function formatDailyMarketBriefTelegram(forHtml = true): string {
+  if (forHtml) {
+    return [
+      `🧭 <b>الدليل اليومي لجلسات السوق ومواعيد القرارات المهمة 📊</b>`,
+      `─────────────────`,
+      `🏛️ <b>مواقيت الجلسات المالية الرئيسية (بتوقيت مكة المكرمة):</b>`,
+      `• 🇯🇵 <b>طوكيو (آسيا):</b> <code>03:00 ص - 12:00 م</code> (سيولة أزواج الين)`,
+      `• 🇬🇧 <b>لندن (أوروبا):</b> <code>10:00 ص - 07:00 م</code> (انطلاق السيولة الكبرى)`,
+      `• 🇺🇸 <b>نيويورك (أمريكا):</b> <code>03:00 م - 12:00 منتصف الليل</code> (الذهب ومحركات الدولار)`,
+      ``,
+      `🔥 <b>الفترة الذهبية للتداول (Kill Zone):</b>`,
+      `• <code>03:00 م - 07:00 م</code> (تداخل لندن + نيويورك = 65% من سيولة السوق)`,
+      ``,
+      `⚠️ <b>أوقات الحذر الإلزامية:</b>`,
+      `• <code>12:00 ص - 01:00 ص</code> (فترة الرول أوفر واتساع السبريد)`,
+      `• أوقات صدور مؤتمرات الفيدرالي وبيانات التوظيف NFP والتضخم CPI`,
+      `─────────────────`,
+      `🛡️ <i>التزم بإدارة رأس المال (مخاطرة 1% فقط لكل صفقة).</i>`,
+    ].join('\n');
+  }
+
+  return [
+    `🧭 الدليل اليومي لجلسات السوق ومواعيد القرارات المهمة 📊`,
+    `─────────────────`,
+    `🏛️ مواقيت الجلسات المالية الرئيسية (بتوقيت مكة المكرمة):`,
+    `• 🇯🇵 طوكيو (آسيا): 03:00 ص - 12:00 م (سيولة أزواج الين)`,
+    `• 🇬🇧 لندن (أوروبا): 10:00 ص - 07:00 م (انطلاق السيولة الكبرى)`,
+    `• 🇺🇸 نيويورك (أمريكا): 03:00 م - 12:00 منتصف الليل (الذهب ومحركات الدولار)`,
+    ``,
+    `🔥 الفترة الذهبية للتداول (Kill Zone):`,
+    `• 03:00 م - 07:00 م (تداخل لندن + نيويورك = 65% من سيولة السوق)`,
+    ``,
+    `⚠️ أوقات الحذر الإلزامية:`,
+    `• 12:00 ص - 01:00 ص (فترة الرول أوفر واتساع السبريد)`,
+    `• أوقات صدور مؤتمرات الفيدرالي وبيانات التوظيف NFP والتضخم CPI`,
+    `─────────────────`,
+    `🛡️ التزم بإدارة رأس المال (مخاطرة 1% فقط لكل صفقة).`,
+  ].join('\n');
+}

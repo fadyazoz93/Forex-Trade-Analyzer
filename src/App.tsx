@@ -332,13 +332,7 @@ export default function App() {
       return [newSignal, ...prev.slice(0, 49)];
     });
 
-    // Auto-send to Telegram channel immediately if enabled (strictly once per currency at the same time)
-    if (telegramConfigRef.current.autoSend) {
-      if (!sentSignalsTrackerRef.current.has(cleanSym)) {
-        sentSignalsTrackerRef.current.add(cleanSym);
-        handleSendTelegramSignal(newSignal);
-      }
-    }
+    // Note: 24/7 Automated Telegram broadcasting is handled exclusively by Railway server worker to prevent duplicate client emissions.
 
     // Persist signal to Turso Cloud Database
     fetch('/api/database/signals', {
@@ -401,16 +395,7 @@ export default function App() {
           return updated.slice(0, 50);
         });
 
-        // Auto-send newly discovered signals to Telegram channel if enabled (strictly once per currency at the same time)
-        if (telegramConfigRef.current.autoSend) {
-          eligibleSignals.forEach((sig) => {
-            const cleanSym = normalizeSymbolKey(sig.symbol);
-            if (!sentSignalsTrackerRef.current.has(cleanSym)) {
-              sentSignalsTrackerRef.current.add(cleanSym);
-              handleSendTelegramSignal(sig);
-            }
-          });
-        }
+        // Note: 24/7 Automated Telegram broadcasting is handled exclusively by Railway server worker.
       }
     }
 
