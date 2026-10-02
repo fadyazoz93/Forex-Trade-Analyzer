@@ -209,7 +209,7 @@ export function evaluateSopGates(
 }
 
 /**
- * Computes Quad scale-out targets (TP1 to TP4 for 1:2 R:R)
+ * Computes Quad scale-out targets (TP1 to TP4 optimized for 1:3 R:R)
  */
 export function calculateQuadTargets(
   entryPrice: number,
@@ -219,10 +219,10 @@ export function calculateQuadTargets(
 ): QuadTargets {
   const sign = isLong ? 1 : -1;
   return {
-    tp1: Number((entryPrice + sign * (riskDist * 0.5)).toFixed(digits)), // 0.5 R
-    tp2: Number((entryPrice + sign * (riskDist * 1.0)).toFixed(digits)), // 1.0 R
-    tp3: Number((entryPrice + sign * (riskDist * 1.5)).toFixed(digits)), // 1.5 R
-    tp4: Number((entryPrice + sign * (riskDist * 2.0)).toFixed(digits)), // 2.0 R (1:2 R:R)
+    tp1: Number((entryPrice + sign * (riskDist * 1.0)).toFixed(digits)), // 1.0 R (Secure Profit & Move SL to BE)
+    tp2: Number((entryPrice + sign * (riskDist * 1.5)).toFixed(digits)), // 1.5 R (Lock +0.5R)
+    tp3: Number((entryPrice + sign * (riskDist * 2.0)).toFixed(digits)), // 2.0 R (Lock +1.0R & Trailing)
+    tp4: Number((entryPrice + sign * (riskDist * 3.0)).toFixed(digits)), // 3.0 R (Runner for High Reward)
   };
 }
 
@@ -259,6 +259,7 @@ export function scanMarketWatchSymbols(
       }
       const actualRisk = Math.abs(liveEntryPrice - structuralSL);
       const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, true, sym.digits);
+      const lotInfo = calculateLotPreview(sym, liveEntryPrice, structuralSL);
 
       signals.push({
         id: `SIG_${sym.id}_LONG_${Date.now()}`,
@@ -272,7 +273,7 @@ export function scanMarketWatchSymbols(
         slPrice: structuralSL,
         tpTargets: quadTP,
         riskDistance: actualRisk,
-        riskRewardRatio: '1:2 (Quad 0.5R, 1.0R, 1.5R, 2.0R)',
+        riskRewardRatio: '1:3 (Quad 1.0R, 1.5R, 2.0R, 3.0R)',
         score: evalLong.score,
         gates: evalLong,
         status: 'ACTIVE',
@@ -280,7 +281,9 @@ export function scanMarketWatchSymbols(
         timeFormatted: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         comment: 'Gann Intraday V42',
         telegramSent: false,
-        lotSize: calculateLotPreview(sym, liveEntryPrice, structuralSL),
+        lotSize: lotInfo.lot,
+        riskDollars: lotInfo.riskDollars,
+        pipRisk: lotInfo.pipRisk,
       });
     }
 
@@ -294,6 +297,7 @@ export function scanMarketWatchSymbols(
       }
       const actualRisk = Math.abs(liveEntryPrice - structuralSL);
       const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, false, sym.digits);
+      const lotInfo = calculateLotPreview(sym, liveEntryPrice, structuralSL);
 
       signals.push({
         id: `SIG_${sym.id}_SHORT_${Date.now()}`,
@@ -307,7 +311,7 @@ export function scanMarketWatchSymbols(
         slPrice: structuralSL,
         tpTargets: quadTP,
         riskDistance: actualRisk,
-        riskRewardRatio: '1:2 (Quad 0.5R, 1.0R, 1.5R, 2.0R)',
+        riskRewardRatio: '1:3 (Quad 1.0R, 1.5R, 2.0R, 3.0R)',
         score: evalShort.score,
         gates: evalShort,
         status: 'ACTIVE',
@@ -315,7 +319,9 @@ export function scanMarketWatchSymbols(
         timeFormatted: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         comment: 'Gann Intraday V42',
         telegramSent: false,
-        lotSize: calculateLotPreview(sym, liveEntryPrice, structuralSL),
+        lotSize: lotInfo.lot,
+        riskDollars: lotInfo.riskDollars,
+        pipRisk: lotInfo.pipRisk,
       });
     }
   });
@@ -356,6 +362,7 @@ export function evaluateSingleSymbolOnTick(
     }
     const actualRisk = Math.abs(liveEntryPrice - structuralSL);
     const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, true, sym.digits);
+    const lotInfo = calculateLotPreview(sym, liveEntryPrice, structuralSL);
 
     newSignal = {
       id: `SIG_${sym.id}_LONG_${Date.now()}`,
@@ -369,7 +376,7 @@ export function evaluateSingleSymbolOnTick(
       slPrice: structuralSL,
       tpTargets: quadTP,
       riskDistance: actualRisk,
-      riskRewardRatio: '1:2 (Quad 0.5R, 1.0R, 1.5R, 2.0R)',
+      riskRewardRatio: '1:3 (Quad 1.0R, 1.5R, 2.0R, 3.0R)',
       score: evalLong.score,
       gates: evalLong,
       status: 'ACTIVE',
@@ -381,7 +388,9 @@ export function evaluateSingleSymbolOnTick(
       }),
       comment: 'Gann Intraday V42',
       telegramSent: false,
-      lotSize: calculateLotPreview(sym, liveEntryPrice, structuralSL),
+      lotSize: lotInfo.lot,
+      riskDollars: lotInfo.riskDollars,
+      pipRisk: lotInfo.pipRisk,
       livePips: 0,
       livePnL: 0,
       breakEvenActive: false,
@@ -397,6 +406,7 @@ export function evaluateSingleSymbolOnTick(
     }
     const actualRisk = Math.abs(liveEntryPrice - structuralSL);
     const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, false, sym.digits);
+    const lotInfo = calculateLotPreview(sym, liveEntryPrice, structuralSL);
 
     newSignal = {
       id: `SIG_${sym.id}_SHORT_${Date.now()}`,
@@ -410,7 +420,7 @@ export function evaluateSingleSymbolOnTick(
       slPrice: structuralSL,
       tpTargets: quadTP,
       riskDistance: actualRisk,
-      riskRewardRatio: '1:2 (Quad 0.5R, 1.0R, 1.5R, 2.0R)',
+      riskRewardRatio: '1:3 (Quad 1.0R, 1.5R, 2.0R, 3.0R)',
       score: evalShort.score,
       gates: evalShort,
       status: 'ACTIVE',
@@ -422,7 +432,9 @@ export function evaluateSingleSymbolOnTick(
       }),
       comment: 'Gann Intraday V42',
       telegramSent: false,
-      lotSize: calculateLotPreview(sym, liveEntryPrice, structuralSL),
+      lotSize: lotInfo.lot,
+      riskDollars: lotInfo.riskDollars,
+      pipRisk: lotInfo.pipRisk,
       livePips: 0,
       livePnL: 0,
       breakEvenActive: false,
@@ -517,13 +529,45 @@ export function updateSignalRealtimeMetrics(
   };
 }
 
-function calculateLotPreview(sym: SymbolConfig, entry: number, sl: number, balance = 10000, riskPct = 1.0): number {
-  const riskDollars = balance * (riskPct / 100);
-  const slPoints = Math.abs(entry - sl) / sym.point;
-  if (slPoints <= 0) return 0.01;
+export function calculateLotPreview(
+  sym: SymbolConfig,
+  entry: number,
+  sl: number,
+  balance = 1000,
+  riskPct = 1.0
+): { lot: number; riskDollars: number; pipRisk: number } {
+  const safeBalance = balance > 0 ? balance : 1000;
+  const safeRiskPct = riskPct > 0 ? riskPct : 1.0;
+  const riskDollars = safeBalance * (safeRiskPct / 100);
 
-  let lot = (riskDollars / (slPoints * (sym.tickValue / sym.tickSize * sym.point)));
-  if (sym.category === 'metal') lot *= 0.30;
-  lot = Math.max(sym.minLot, Math.min(sym.maxLot, Math.round(lot * 100) / 100));
-  return Number(lot.toFixed(2));
+  const diff = Math.abs(entry - sl);
+  let pipRisk = 0;
+  if (sym.category === 'metal') {
+    pipRisk = Number((diff / 0.10).toFixed(1));
+  } else if (sym.symbol.includes('JPY')) {
+    pipRisk = Number((diff / 0.01).toFixed(1));
+  } else {
+    pipRisk = Number((diff / 0.0001).toFixed(1));
+  }
+
+  const slPoints = diff / sym.point;
+  if (slPoints <= 0) {
+    return { lot: sym.minLot, riskDollars: Number(riskDollars.toFixed(2)), pipRisk: 10 };
+  }
+
+  const pointValuePerLot = (sym.tickValue / sym.tickSize) * sym.point;
+  let rawLot = riskDollars / (slPoints * pointValuePerLot);
+
+  if (sym.category === 'metal') {
+    rawLot *= 0.30;
+  }
+
+  let finalLot = Math.max(sym.minLot, Math.min(sym.maxLot, Math.round(rawLot * 100) / 100));
+  finalLot = Number(finalLot.toFixed(2));
+
+  return {
+    lot: finalLot,
+    riskDollars: Number(riskDollars.toFixed(2)),
+    pipRisk: Number(pipRisk.toFixed(1)),
+  };
 }

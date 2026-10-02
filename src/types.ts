@@ -109,6 +109,8 @@ export interface TradeSignal {
   trailingSlPrice?: number;
   highestTargetHit?: 'TP1' | 'TP2' | 'TP3' | 'TP4' | null;
   isRealtimeUpdate?: boolean;
+  riskDollars?: number;
+  pipRisk?: number;
 }
 
 export interface AccountRiskSettings {

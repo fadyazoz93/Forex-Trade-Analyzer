@@ -37,7 +37,9 @@ import { TradeSignal } from './src/types';
 dotenv.config();
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+// Dev server in AI Studio must always listen on port 3000, while production (Railway/Docker) uses process.env.PORT
+const isDev = process.env.NODE_ENV !== 'production';
+const PORT = isDev ? 3000 : (Number(process.env.PORT) || 3000);
 
 // Middleware for JSON parsing
 app.use(express.json());
@@ -517,7 +519,11 @@ async function startServer() {
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === 'true' ? false : undefined,
+        watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

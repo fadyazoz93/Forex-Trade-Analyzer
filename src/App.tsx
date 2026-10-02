@@ -102,20 +102,35 @@ export default function App() {
   const [isSessionHolidayModalOpen, setIsSessionHolidayModalOpen] = useState(false);
   const [marketHoursStatus, setMarketHoursStatus] = useState<MarketHoursStatus>(() => getMarketHoursStatus());
 
-  // Settings state
-  const [riskSettings, setRiskSettings] = useState<AccountRiskSettings>({
-    balance: 10000,
-    riskPercent: 1.0,
-    maxRiskDollars: 1000,
-    maxLotPerTrade: 2.0,
-    maxTotalLots: 5.0,
-    useAutoLot: true,
-    fixedLot: 0.01,
-    maxGlobalPositions: 5,
-    minMarginLevel: 300,
-    maxDailyLossPercent: 5.0,
-    dailyTargetProfitPct: 10.0,
+  // Settings state (defaults to realistic $1,000 retail account with 1% risk)
+  const [riskSettings, setRiskSettingsState] = useState<AccountRiskSettings>(() => {
+    try {
+      const saved = localStorage.getItem('forex_trade_analyzer_risk_settings');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {}
+    return {
+      balance: 1000,
+      riskPercent: 1.0,
+      maxRiskDollars: 100,
+      maxLotPerTrade: 1.0,
+      maxTotalLots: 3.0,
+      useAutoLot: true,
+      fixedLot: 0.01,
+      maxGlobalPositions: 5,
+      minMarginLevel: 300,
+      maxDailyLossPercent: 5.0,
+      dailyTargetProfitPct: 10.0,
+    };
   });
+
+  const setRiskSettings = (newSettings: AccountRiskSettings) => {
+    setRiskSettingsState(newSettings);
+    try {
+      localStorage.setItem('forex_trade_analyzer_risk_settings', JSON.stringify(newSettings));
+    } catch {}
+  };
 
   const [telegramConfig, setTelegramConfig] = useState<TelegramConfig>(() => {
     try {

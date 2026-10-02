@@ -181,6 +181,9 @@ export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true)
   const tp4Pips = calculatePipsDifference(sym, signal.entryPrice, tp4);
   const slPips = calculatePipsDifference(sym, signal.entryPrice, sl);
 
+  const lotStr = (signal.lotSize || 0.01).toFixed(2);
+  const riskDollarsStr = signal.riskDollars ? `$${signal.riskDollars.toFixed(0)}` : '$10';
+
   if (forHtml) {
     return [
       `⚡ <b>${actionText}: ${sym}</b>`,
@@ -192,6 +195,8 @@ export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true)
       `🎯 <b>الهدف 4:</b> <code>${formatTelegramPrice(tp4, sym)}</code> (+${tp4Pips}p)`,
       `🛑 <b>الوقف:</b> <code>${formatTelegramPrice(sl, sym)}</code> (-${slPips}p)`,
       `─────────────────`,
+      `📊 <b>اللوت المقترح:</b> <code>${lotStr} Lot</code> (لحساب $1000 / مخاطرة 1%)`,
+      `🛡️ <b>أقصى خسارة:</b> <code>${riskDollarsStr}</code>`,
       `🔒 <i>تأمين الدخول (BE) فور تحقق الهدف 1</i>`,
     ].join('\n');
   }
@@ -206,6 +211,8 @@ export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true)
     `🎯 الهدف 4: ${formatTelegramPrice(tp4, sym)} (+${tp4Pips}p)`,
     `🛑 الوقف: ${formatTelegramPrice(sl, sym)} (-${slPips}p)`,
     `─────────────────`,
+    `📊 اللوت المقترح: ${lotStr} Lot (لحساب $1000 / مخاطرة 1%)`,
+    `🛡️ أقصى خسارة: ${riskDollarsStr}`,
     `🔒 تأمين الدخول (BE) فور تحقق الهدف 1`,
   ].join('\n');
 }

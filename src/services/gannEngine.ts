@@ -179,6 +179,7 @@ export function checkGannTimeCycle(barsElapsed: number, anchorPrice: number): bo
 
 /**
  * Calculates Structural Stop Loss below Swing Low or above Swing High + ATR buffer
+ * Guarantees a minimum safety cushion so market noise or broker spread spikes never hit SL prematurely
  */
 export function calculateStructuralSL(
   candles: Candle[],
@@ -189,15 +190,15 @@ export function calculateStructuralSL(
   digits: number = 5,
   point: number = 0.00001
 ): number {
-  const atrBufferDist = atr > 0 ? atr * 0.5 : 10 * point;
+  const atrBufferDist = Math.max(atr > 0 ? atr * 0.75 : 15 * point, riskDistFallback * 0.20);
   const anchor = getLatestGannSwingAnchor(candles, 2, isLong, 40);
 
   if (anchor.found) {
     const calculatedSL = isLong ? anchor.price - atrBufferDist : anchor.price + atrBufferDist;
     const dist = Math.abs(entryPrice - calculatedSL);
 
-    // If within reasonable bounds (0.75x to 1.75x of fallback)
-    if (dist >= riskDistFallback * 0.75 && dist <= riskDistFallback * 1.75) {
+    // Ensure stop distance is at least the full riskDistFallback cushion to avoid market noise
+    if (dist >= riskDistFallback && dist <= riskDistFallback * 2.2) {
       return Number(calculatedSL.toFixed(digits));
     }
   }

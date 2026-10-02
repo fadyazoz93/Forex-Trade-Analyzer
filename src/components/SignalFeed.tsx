@@ -367,8 +367,10 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                       <span>Break-Even نشط (الوقف مؤمّن على الدخول)</span>
                     </div>
                   ) : (
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      عقد مقترح: <span className="text-cyan-300 font-bold">{signal.lotSize} Lot</span>
+                    <div className="text-[11px] text-slate-300 font-mono flex items-center gap-2 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+                      <span>عقد مقترح:</span>
+                      <span className="text-cyan-300 font-bold bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/30">{signal.lotSize} Lot</span>
+                      <span className="text-slate-400 text-[10px]">(مخاطرة ${signal.riskDollars || 10})</span>
                     </div>
                   )}
                 </div>
