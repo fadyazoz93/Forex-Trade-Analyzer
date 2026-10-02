@@ -159,7 +159,7 @@ function trackActiveSignalsLifeCycle() {
       }
     }
 
-    // 2. Check TP2 Hit
+    // 2. Check TP2 Hit (Noise Reduction: Track internally & save to DB, skip Telegram spam alert)
     if (
       (sig.highestTargetHit === 'TP2' ||
         sig.highestTargetHit === 'TP3' ||
@@ -167,24 +167,24 @@ function trackActiveSignalsLifeCycle() {
       !events.has('TP2')
     ) {
       events.add('TP2');
-      console.log(`🚀 [Railway 24/7 Worker] TP2 Hit for ${sig.symbol}! Broadcasting update to Telegram...`);
+      console.log(`🚀 [Railway 24/7 Worker] TP2 Hit for ${sig.symbol} (Tracked internally, alert skipped to keep channel clean).`);
       saveTradeSignalToDb(sig).catch(() => {});
-      if (AUTO_SEND) {
+      if (AUTO_SEND && process.env.ENABLE_INTERMEDIATE_TP === 'true') {
         sendTargetHitToTelegram(sig, 'TP2', sig.livePips || 0, BOT_TOKEN, [CHANNEL_ID]).catch((err) =>
           console.warn('Telegram TP2 broadcast error:', err)
         );
       }
     }
 
-    // 3. Check TP3 Hit
+    // 3. Check TP3 Hit (Noise Reduction: Track internally & save to DB, skip Telegram spam alert)
     if (
       (sig.highestTargetHit === 'TP3' || sig.highestTargetHit === 'TP4') &&
       !events.has('TP3')
     ) {
       events.add('TP3');
-      console.log(`🎯 [Railway 24/7 Worker] TP3 Hit for ${sig.symbol}! Broadcasting update to Telegram...`);
+      console.log(`🎯 [Railway 24/7 Worker] TP3 Hit for ${sig.symbol} (Tracked internally, alert skipped to keep channel clean).`);
       saveTradeSignalToDb(sig).catch(() => {});
-      if (AUTO_SEND) {
+      if (AUTO_SEND && process.env.ENABLE_INTERMEDIATE_TP === 'true') {
         sendTargetHitToTelegram(sig, 'TP3', sig.livePips || 0, BOT_TOKEN, [CHANNEL_ID]).catch((err) =>
           console.warn('Telegram TP3 broadcast error:', err)
         );

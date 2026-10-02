@@ -47,40 +47,49 @@ export function evaluateSopGates(
   const sym = symbolConfig;
 
   // Retrieve multi-timeframe candles:
-  // D1 (Daily Macro Bias) -> H4 (Trend & Gann Anchor) -> M15 (Clean RSI Momentum) -> M5 (BOS Trigger)
+  // D1 (Daily Macro Bias) -> H4 (Macro Structure) -> H1 (200 EMA Trend Anchor) -> M15 (RSI Momentum) -> M5 (BOS Trigger)
   const d1Candles = getCandles(sym.id, 'D1');
   const h4Candles = getCandles(sym.id, 'H4');
+  const h1Candles = getCandles(sym.id, 'H1');
   const m15Candles = getCandles(sym.id, 'M15');
   const m5Candles = getCandles(sym.id, 'M5');
 
   // Strictly Intraday timeframes for high probability and noise rejection
-  const trendCandles = h4Candles;
-  const gannAnchorCandles = h4Candles;
+  const trendCandles = h1Candles.length >= 50 ? h1Candles : h4Candles;
+  const gannAnchorCandles = h4Candles.length > 0 ? h4Candles : h1Candles;
   const rsiCandles = m15Candles;
   const triggerCandles = m5Candles;
 
   const currentPrice = isLong ? currentTick.ask : currentTick.bid;
 
-  // --- GATE 1: Daily Macro Bias (D1 EMA 50) + Higher TF Trend (H4 EMA 200) + Slope ---
+  // --- GATE 1: Daily Macro Bias (D1 EMA 50) + H1/H4 200 EMA Trend Alignment + Slope ---
   const d1Ema50 = calculateEMA(d1Candles, 50);
   const latestD1Close = d1Candles.length > 0 ? d1Candles[d1Candles.length - 1].close : currentPrice;
   const latestD1Ema = d1Ema50.length > 0 ? d1Ema50[d1Ema50.length - 1] : currentPrice;
   const dailyMacroOk = isLong ? latestD1Close >= latestD1Ema : latestD1Close <= latestD1Ema;
 
-  const trendEma200 = calculateEMA(trendCandles, 200);
-  const latestTrendEma = trendEma200.length > 0 ? trendEma200[trendEma200.length - 1] : currentPrice;
-  const trendAboveEma = isLong ? currentPrice > latestTrendEma : currentPrice < latestTrendEma;
-  const slopeHealthy = isTrendSlopeHealthy(trendEma200, sym.point, isLong, 2.0);
+  // Calculate 200 EMA on H1 (the global standard for MetaTrader trend alignment)
+  const h1Ema200 = calculateEMA(h1Candles, 200);
+  const latestH1Ema = h1Ema200.length > 0 ? h1Ema200[h1Ema200.length - 1] : currentPrice;
+  const h1TrendAbove = currentPrice >= latestH1Ema;
 
-  const gate1Passed = dailyMacroOk && trendAboveEma && slopeHealthy;
+  // H4 Trend check
+  const h4Ema = calculateEMA(h4Candles, 50);
+  const latestH4Ema = h4Ema.length > 0 ? h4Ema[h4Ema.length - 1] : currentPrice;
+
+  // Strict trend alignment: NEVER sell if price is above 200 EMA; NEVER buy if price is below 200 EMA
+  const trendAlignmentOk = isLong ? h1TrendAbove : !h1TrendAbove;
+  const slopeHealthy = isTrendSlopeHealthy(h1Ema200.length > 0 ? h1Ema200 : d1Ema50, sym.point, isLong, 1.5);
+
+  const gate1Passed = trendAlignmentOk && (dailyMacroOk || slopeHealthy);
   const gate1: GateStatus = {
     passed: gate1Passed,
     name: 'Daily Macro & 200 EMA Trend',
-    nameAr: 'الاتجاه الكلي اليومي و200 EMA وميلان المسار',
+    nameAr: 'الاتجاه العام وموفينج 200 EMA الصارم',
     detail: isLong
-      ? `D1 Close (${latestD1Close.toFixed(sym.digits)}) ≥ EMA50 (${latestD1Ema.toFixed(sym.digits)}), Trend > 200 EMA`
-      : `D1 Close (${latestD1Close.toFixed(sym.digits)}) ≤ EMA50 (${latestD1Ema.toFixed(sym.digits)}), Trend < 200 EMA`,
-    value: `${dailyMacroOk ? '✓ Macro' : '✗ Macro'} | ${trendAboveEma ? '✓ EMA200' : '✗ EMA200'} | ${slopeHealthy ? '✓ Slope' : '✗ Slope'}`,
+      ? `السعر (${currentPrice.toFixed(sym.digits)}) ≥ موفينج 200 EMA (${latestH1Ema.toFixed(sym.digits)}) [شراء متوافق]`
+      : `السعر (${currentPrice.toFixed(sym.digits)}) ≤ موفينج 200 EMA (${latestH1Ema.toFixed(sym.digits)}) [بيع متوافق]`,
+    value: `${trendAlignmentOk ? '✓ متوافق مع 200 EMA' : '✗ مخالف لموفينج 200'} | H1 EMA: ${latestH1Ema.toFixed(sym.digits)}`,
   };
 
   // --- GATE 2: Gann Square of 9 Confluence (مربع التسعة متعدد الدورات) ---
@@ -204,7 +213,7 @@ export function evaluateSopGates(
     barsElapsed,
     rsiValue,
     dailyEmaValue: latestD1Ema,
-    higherTfEmaValue: latestTrendEma,
+    higherTfEmaValue: latestH1Ema,
   };
 }
 

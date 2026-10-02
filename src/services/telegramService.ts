@@ -158,15 +158,15 @@ function getSymbolArabicName(sym: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 1. New Signal Message Template (نموذج الإشارة الجديدة الشامل)
+// 1. New Signal Message Template (نموذج الإشارة البسيط والأنيق)
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Formats a clean, simple, and concise trading signal message
+ * Formats an ultra-clean, simple, and high-clarity trading signal message
  */
 export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true): string {
   const isBuy = signal.orderType.includes('BUY');
-  const actionText = isBuy ? 'BUY 🟢' : 'SELL 🔴';
+  const actionHeader = isBuy ? 'شراء 🟢 | BUY' : 'بيع 🔴 | SELL';
   const sym = signal.symbol;
 
   const tp1 = signal.tpTargets?.tp1 ?? signal.entryPrice;
@@ -186,43 +186,43 @@ export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true)
 
   if (forHtml) {
     return [
-      `⚡ <b>${actionText}: ${sym}</b>`,
+      `⚡ <b>${actionHeader}: ${sym}</b>`,
       `─────────────────`,
       `🔹 <b>الدخول:</b> <code>${formatTelegramPrice(signal.entryPrice, sym)}</code>`,
-      `🎯 <b>الهدف 1:</b> <code>${formatTelegramPrice(tp1, sym)}</code> (+${tp1Pips}p)`,
-      `🎯 <b>الهدف 2:</b> <code>${formatTelegramPrice(tp2, sym)}</code> (+${tp2Pips}p)`,
-      `🎯 <b>الهدف 3:</b> <code>${formatTelegramPrice(tp3, sym)}</code> (+${tp3Pips}p)`,
-      `🎯 <b>الهدف 4:</b> <code>${formatTelegramPrice(tp4, sym)}</code> (+${tp4Pips}p)`,
-      `🛑 <b>الوقف:</b> <code>${formatTelegramPrice(sl, sym)}</code> (-${slPips}p)`,
+      `🛑 <b>الوقف (SL):</b> <code>${formatTelegramPrice(sl, sym)}</code> (-${slPips}p)`,
+      ``,
+      `🎯 <b>الأهداف:</b>`,
+      `• <b>الهدف 1:</b> <code>${formatTelegramPrice(tp1, sym)}</code> (+${tp1Pips}p) 🔒 <i>تأمين</i>`,
+      `• <b>الهدف 2:</b> <code>${formatTelegramPrice(tp2, sym)}</code> (+${tp2Pips}p)`,
+      `• <b>الهدف 3:</b> <code>${formatTelegramPrice(tp3, sym)}</code> (+${tp3Pips}p)`,
+      `• <b>الهدف 4:</b> <code>${formatTelegramPrice(tp4, sym)}</code> (+${tp4Pips}p)`,
       `─────────────────`,
-      `📊 <b>اللوت المقترح:</b> <code>${lotStr} Lot</code> (لحساب $1000 / مخاطرة 1%)`,
-      `🛡️ <b>أقصى خسارة:</b> <code>${riskDollarsStr}</code>`,
-      `🔒 <i>تأمين الدخول (BE) فور تحقق الهدف 1</i>`,
+      `📊 <b>اللوت:</b> <code>${lotStr} Lot</code> (لحساب $1000 / مخاطرة 1% = ${riskDollarsStr})`,
     ].join('\n');
   }
 
   return [
-    `⚡ ${actionText}: ${sym}`,
+    `⚡ ${actionHeader}: ${sym}`,
     `─────────────────`,
     `🔹 الدخول: ${formatTelegramPrice(signal.entryPrice, sym)}`,
-    `🎯 الهدف 1: ${formatTelegramPrice(tp1, sym)} (+${tp1Pips}p)`,
-    `🎯 الهدف 2: ${formatTelegramPrice(tp2, sym)} (+${tp2Pips}p)`,
-    `🎯 الهدف 3: ${formatTelegramPrice(tp3, sym)} (+${tp3Pips}p)`,
-    `🎯 الهدف 4: ${formatTelegramPrice(tp4, sym)} (+${tp4Pips}p)`,
-    `🛑 الوقف: ${formatTelegramPrice(sl, sym)} (-${slPips}p)`,
+    `🛑 الوقف (SL): ${formatTelegramPrice(sl, sym)} (-${slPips}p)`,
+    ``,
+    `🎯 الأهداف:`,
+    `• الهدف 1: ${formatTelegramPrice(tp1, sym)} (+${tp1Pips}p) 🔒 تأمين`,
+    `• الهدف 2: ${formatTelegramPrice(tp2, sym)} (+${tp2Pips}p)`,
+    `• الهدف 3: ${formatTelegramPrice(tp3, sym)} (+${tp3Pips}p)`,
+    `• الهدف 4: ${formatTelegramPrice(tp4, sym)} (+${tp4Pips}p)`,
     `─────────────────`,
-    `📊 اللوت المقترح: ${lotStr} Lot (لحساب $1000 / مخاطرة 1%)`,
-    `🛡️ أقصى خسارة: ${riskDollarsStr}`,
-    `🔒 تأمين الدخول (BE) فور تحقق الهدف 1`,
+    `📊 اللوت: ${lotStr} Lot (لحساب $1000 / مخاطرة 1% = ${riskDollarsStr})`,
   ].join('\n');
 }
 
 // ─────────────────────────────────────────────────────────────
-// 2. Target Hit Update Templates (نماذج تحديثات تحقيق الأهداف - مختصرة وسريعة)
+// 2. Target Hit Update Templates (تحديثات الأهداف - بسيطة ومباشرة)
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Formats a Target Hit update notification (TP1, TP2, TP3, TP4) - simple & concise
+ * Formats a Target Hit update notification (Focused exclusively on key milestones to reduce noise)
  */
 export function formatTargetHitTelegramMessage(
   signal: TradeSignal,
@@ -249,7 +249,7 @@ export function formatTargetHitTelegramMessage(
       `🎯 تحقق الهدف الأول (TP1) ✅`,
       `─────────────────`,
       `🪙 ${sym} (${dir})`,
-      `💰 الربح: +${pips} نقطة`,
+      `💰 الربح: +${pips} نقطة 🚀`,
       `🔒 الإجراء: نقل الوقف لسعر الدخول (تأمين كامل)`,
     ].join('\n');
   }
@@ -261,15 +261,13 @@ export function formatTargetHitTelegramMessage(
         `─────────────────`,
         `🪙 <b>${sym}</b> (${dir})`,
         `💰 <b>الربح:</b> +${pips} نقطة 🔥`,
-        `🛡️ <b>الإجراء:</b> حجز أرباح إضافية ورفع الوقف لمستوى TP1`,
       ].join('\n');
     }
     return [
       `🚀 تحقق الهدف الثاني (TP2) ✅`,
       `─────────────────`,
       `🪙 ${sym} (${dir})`,
-      `💰 الربح: +${pips} نقطة`,
-      `🛡️ الإجراء: حجز أرباح إضافية ورفع الوقف لمستوى TP1`,
+      `💰 الربح: +${pips} نقطة 🔥`,
     ].join('\n');
   }
 
@@ -286,11 +284,11 @@ export function formatTargetHitTelegramMessage(
       `🎯 تحقق الهدف الثالث (TP3) ✅`,
       `─────────────────`,
       `🪙 ${sym} (${dir})`,
-      `💰 الربح: +${pips} نقطة`,
+      `💰 الربح: +${pips} نقطة ⚡`,
     ].join('\n');
   }
 
-  // TP4: Full Target Hit
+  // TP4: Full Target Win (إغلاق كامل)
   if (forHtml) {
     return [
       `🏆 <b>تحقق كامل الأهداف (TP4) 👑</b>`,
@@ -304,17 +302,17 @@ export function formatTargetHitTelegramMessage(
     `🏆 تحقق كامل الأهداف (TP4) 👑`,
     `─────────────────`,
     `🪙 ${sym} (${dir})`,
-    `💰 إجمالي الربح: +${pips} نقطة كاملة!`,
+    `💰 إجمالي الربح: +${pips} نقطة كاملة! 🚀`,
     `✅ تم إغلاق الصفقة بالكامل بنجاح`,
   ].join('\n');
 }
 
 // ─────────────────────────────────────────────────────────────
-// 3. Stop Loss Hit Update Template (نموذج ضرب وقف الخسارة - مختصر)
+// 3. Stop Loss Hit Update Template (ضرب وقف الخسارة - بسيط)
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Formats a Stop Loss Hit notification - simple & concise
+ * Formats a Stop Loss Hit notification - simple & disciplined
  */
 export function formatStopLossHitTelegramMessage(
   signal: TradeSignal,
@@ -343,7 +341,7 @@ export function formatStopLossHitTelegramMessage(
 }
 
 // ─────────────────────────────────────────────────────────────
-// 4. Breakeven Alert Template (نموذج تأمين الصفقة - مختصر)
+// 4. Breakeven Alert Template (تأمين الصفقة - بسيط)
 // ─────────────────────────────────────────────────────────────
 
 /**
@@ -359,7 +357,7 @@ export function formatBreakevenTelegramMessage(signal: TradeSignal, forHtml = tr
       `🔒 <b>تأمين الصفقة (Breakeven)</b>`,
       `─────────────────`,
       `🪙 <b>${sym}</b> (${dir})`,
-      `✅ تم نقل الوقف لسعر الدخول <code>${formatTelegramPrice(signal.entryPrice, sym)}</code>`,
+      `✅ <b>تم نقل الوقف لسعر الدخول:</b> <code>${formatTelegramPrice(signal.entryPrice, sym)}</code>`,
       `🛡️ الصفقة خالية من المخاطر (Risk-Free)`,
     ].join('\n');
   }
@@ -367,7 +365,7 @@ export function formatBreakevenTelegramMessage(signal: TradeSignal, forHtml = tr
     `🔒 تأمين الصفقة (Breakeven)`,
     `─────────────────`,
     `🪙 ${sym} (${dir})`,
-    `✅ تم نقل الوقف لسعر الدخول ${formatTelegramPrice(signal.entryPrice, sym)}`,
+    `✅ تم نقل الوقف لسعر الدخول: ${formatTelegramPrice(signal.entryPrice, sym)}`,
     `🛡️ الصفقة خالية من المخاطر (Risk-Free)`,
   ].join('\n');
 }
@@ -489,16 +487,19 @@ export async function testTelegramConnection(
   targetIds: string[] | string = [DEFAULT_TELEGRAM_CHANNEL_ID, DEFAULT_TELEGRAM_CHAT_ID]
 ): Promise<TelegramSendResult> {
   const testMsg = [
-    `⚡ <b>BUY 🟢: XAU/USD (تجربة اتصال)</b>`,
+    `⚡ <b>شراء 🟢 | BUY: XAU/USD (تجربة)</b>`,
     `─────────────────`,
     `🔹 <b>الدخول:</b> <code>$2650.00</code>`,
-    `🎯 <b>الهدف 1:</b> <code>$2658.00</code> (+80p)`,
-    `🎯 <b>الهدف 2:</b> <code>$2666.00</code> (+160p)`,
-    `🎯 <b>الهدف 3:</b> <code>$2674.00</code> (+240p)`,
-    `🎯 <b>الهدف 4:</b> <code>$2682.00</code> (+320p)`,
-    `🛑 <b>الوقف:</b> <code>$2634.00</code> (-160p)`,
+    `🛑 <b>الوقف (SL):</b> <code>$2634.00</code> (-160p)`,
+    ``,
+    `🎯 <b>الأهداف:</b>`,
+    `• <b>الهدف 1:</b> <code>$2658.00</code> (+80p) 🔒 <i>تأمين</i>`,
+    `• <b>الهدف 2:</b> <code>$2666.00</code> (+160p)`,
+    `• <b>الهدف 3:</b> <code>$2674.00</code> (+240p)`,
+    `• <b>الهدف 4:</b> <code>$2682.00</code> (+320p)`,
     `─────────────────`,
-    `✅ اتصال البوت بالقناة والمحادثة يعمل بنجاح!`,
+    `📊 <b>اللوت:</b> <code>0.02 Lot</code> (لحساب $1000 / مخاطرة 1%)`,
+    `✅ <b>اتصال البوت بالقناة يعمل بنجاح!</b>`,
   ].join('\n');
 
   return sendTelegramMultiTarget(token, targetIds, testMsg);
