@@ -601,14 +601,14 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                     <div className="mt-2 space-y-1.5 text-xs bg-slate-950 p-3 rounded-xl border border-slate-800">
                       <div className="flex items-start justify-between gap-2 pb-1 border-b border-slate-800/60">
                         <span className="text-slate-400">
-                          بوابة 1 (الاتجاه الكلي اليومي و200 EMA):
+                          بوابة 1 (Session VWAP وموفينج 200 EMA):
                         </span>
                         <span className="font-semibold text-emerald-400 text-right">
                           {signal.gates.gate1_macroAndEma.detail}
                         </span>
                       </div>
                       <div className="flex items-start justify-between gap-2 pb-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">بوابة 2 (مربع التسعة لجان Sq9):</span>
+                        <span className="text-slate-400">بوابة 2 (مربع 9 وVolume Profile POC):</span>
                         <span className="font-semibold text-cyan-400 text-right">
                           {signal.gates.gate2_gannSq9.detail}
                         </span>
@@ -620,13 +620,13 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                         </span>
                       </div>
                       <div className="flex items-start justify-between gap-2 pb-1 border-b border-slate-800/60">
-                        <span className="text-slate-400">بوابة 4 (فلتر زخم RSI النظيف):</span>
+                        <span className="text-slate-400">بوابة 4 (كنس السيولة Sweep وMSS):</span>
                         <span className="font-semibold text-purple-400 text-right">
                           {signal.gates.gate4_rsi.detail}
                         </span>
                       </div>
                       <div className="flex items-start justify-between gap-2">
-                        <span className="text-slate-400">بوابة 5 (السلوك السعري، الفوليوم وBOS):</span>
+                        <span className="text-slate-400">بوابة 5 (زناد FVG وإزاحة الفوليوم):</span>
                         <span className="font-semibold text-amber-400 text-right">
                           {signal.gates.gate5_priceActionAndBos.detail}
                         </span>

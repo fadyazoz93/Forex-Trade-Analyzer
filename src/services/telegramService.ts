@@ -194,17 +194,32 @@ export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true)
   const riskDollarsStr = signal.riskDollars ? `$${signal.riskDollars.toFixed(0)}` : '$10';
 
   if (forHtml) {
+    const vpBadge = signal.gates?.volumeProfile?.confluentLevelName && signal.gates.volumeProfile.confluentLevelName !== 'NONE'
+      ? `• <b>Volume Profile:</b> ${signal.gates.volumeProfile.confluentLevelName} Node`
+      : `• <b>Volume Profile:</b> POC Confluence`;
+    const vwapBadge = signal.gates?.sessionVwap?.aligned
+      ? `• <b>Session VWAP:</b> متوافق مع التدفق المؤسسي`
+      : `• <b>Session VWAP:</b> اختبار ارتدادي`;
+    const triggerBadge = signal.gates?.smcTrigger?.triggerDescription
+      ? `• <b>زناد الدخول:</b> ${signal.gates.smcTrigger.triggerDescription}`
+      : `• <b>زناد الدخول:</b> كنس سيولة (Sweep) + كسر هيكل (MSS) + FVG`;
+
     return [
       `⚡ <b>${actionHeader}: ${sym}</b>`,
       `─────────────────`,
       `🔹 <b>الدخول:</b> <code>${formatTelegramPrice(signal.entryPrice, sym)}</code>`,
-      `🛑 <b>الوقف (SL):</b> <code>${formatTelegramPrice(sl, sym)}</code> (-${slPips}p)`,
+      `🛑 <b>الوقف (Dynamic ATR SL):</b> <code>${formatTelegramPrice(sl, sym)}</code> (-${slPips}p)`,
       ``,
       `🎯 <b>الأهداف:</b>`,
       `• <b>الهدف 1:</b> <code>${formatTelegramPrice(tp1, sym)}</code> (+${tp1Pips}p) 🔒 <i>تأمين</i>`,
       `• <b>الهدف 2:</b> <code>${formatTelegramPrice(tp2, sym)}</code> (+${tp2Pips}p)`,
       `• <b>الهدف 3:</b> <code>${formatTelegramPrice(tp3, sym)}</code> (+${tp3Pips}p)`,
       `• <b>الهدف 4:</b> <code>${formatTelegramPrice(tp4, sym)}</code> (+${tp4Pips}p)`,
+      `─────────────────`,
+      `🏛️ <b>التوافق المؤسسي الحديث:</b>`,
+      vpBadge,
+      vwapBadge,
+      triggerBadge,
       `─────────────────`,
       `📊 <b>اللوت:</b> <code>${lotStr} Lot</code> (لحساب $1000 / مخاطرة 1% = ${riskDollarsStr})`,
     ].join('\n');
@@ -214,13 +229,18 @@ export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true)
     `⚡ ${actionHeader}: ${sym}`,
     `─────────────────`,
     `🔹 الدخول: ${formatTelegramPrice(signal.entryPrice, sym)}`,
-    `🛑 الوقف (SL): ${formatTelegramPrice(sl, sym)} (-${slPips}p)`,
+    `🛑 الوقف (Dynamic ATR SL): ${formatTelegramPrice(sl, sym)} (-${slPips}p)`,
     ``,
     `🎯 الأهداف:`,
     `• الهدف 1: ${formatTelegramPrice(tp1, sym)} (+${tp1Pips}p) 🔒 تأمين`,
     `• الهدف 2: ${formatTelegramPrice(tp2, sym)} (+${tp2Pips}p)`,
     `• الهدف 3: ${formatTelegramPrice(tp3, sym)} (+${tp3Pips}p)`,
     `• الهدف 4: ${formatTelegramPrice(tp4, sym)} (+${tp4Pips}p)`,
+    `─────────────────`,
+    `🏛️ التوافق المؤسسي:`,
+    `• Volume Profile: POC/VAH/VAL Confluence`,
+    `• Session VWAP: Institutional Flow Aligned`,
+    `• زناد الدخول: Sweep + MSS + FVG Retest`,
     `─────────────────`,
     `📊 اللوت: ${lotStr} Lot (لحساب $1000 / مخاطرة 1% = ${riskDollarsStr})`,
   ].join('\n');

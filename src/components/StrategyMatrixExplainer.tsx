@@ -71,10 +71,9 @@ export const StrategyMatrixExplainer: React.FC = () => {
                     1
                   </span>
                   <div>
-                    <strong className="text-white">فلتر الاتجاه الكلي اليومي و200 EMA:</strong>
+                    <strong className="text-white">سيولة Session VWAP المؤسسية وموفينج 200 EMA:</strong>
                     <span className="text-slate-400 mr-1">
-                      إغلاق شمعة اليوم اليومية أعلى متوسط Daily EMA 50 للشراء (أو أسفله للبيع) +
-                      تمركز السعر أعلى 200 EMA وميلان المسار ≥ 2 نقطة.
+                      فلترة اتجاه التدفق المالي كبار المؤسسات عبر Session VWAP (شراء فقط إذا كان السعر أعلى VWAP أو يعيد اختباره، وبيع إذا كان أسفله) متزامناً مع 200 EMA.
                     </span>
                   </div>
                 </li>
@@ -83,10 +82,9 @@ export const StrategyMatrixExplainer: React.FC = () => {
                     2
                   </span>
                   <div>
-                    <strong className="text-white">توافق مربع التسعة متعدد الدورات (Sq9):</strong>
+                    <strong className="text-white">تطابق مربع التسعة (Sq9) مع Volume Profile (POC/VAH/VAL):</strong>
                     <span className="text-slate-400 mr-1">
-                      تطابق السعر اللحظي مع زوايا جان (45° إلى 720°) انطلاقاً من القمم والقيعان
-                      المتأرجحة بنسبة تسامح لا تتجاوز 15%.
+                      تطابق السعر اللحظي مع زوايا جان لمربع التسعة متزامناً مع عقدة أعلى حجم تداول (POC) أو حافة منطقة القيمة (VAH/VAL) لتأكيد حجمي فوري غير متأخر.
                     </span>
                   </div>
                 </li>
@@ -95,10 +93,9 @@ export const StrategyMatrixExplainer: React.FC = () => {
                     3
                   </span>
                   <div>
-                    <strong className="text-white">مقياس زاوية 1x1 والدورات التوافقية:</strong>
+                    <strong className="text-white">مقياس زاوية 1x1 والدورات التوافقية (144):</strong>
                     <span className="text-slate-400 mr-1">
-                      متابعة ميلان خط زاوية 1x1 التكيفي (ATR / 48) وتوافق الشموع المنقضية مع عقد دورة
-                      جان (144 و 90 و 49 و 35 و 21 شمعة).
+                      متابعة ميلان خط زاوية 1x1 التكيفي (ATR / 48) وتوافق الشموع المنقضية مع عقد دورة جان التوافقية.
                     </span>
                   </div>
                 </li>
@@ -107,10 +104,9 @@ export const StrategyMatrixExplainer: React.FC = () => {
                     4
                   </span>
                   <div>
-                    <strong className="text-white">فلتر زخم RSI النظيف:</strong>
+                    <strong className="text-white">كنس السيولة (Sweep) وتغير هيكل السوق (MSS):</strong>
                     <span className="text-slate-400 mr-1">
-                      التأكد من تواجد مؤشر RSI 14 ضمن مناطق القوة النظيفة (الشراء: 32-58، البيع:
-                      42-68 للتداول اليومي).
+                      استبعاد الأوامر المعلقة العمياء؛ ننتظر كنس السيولة حول مستوى جان (Sweep) يليه كسر هيكلي لحظي (MSS) لتأكيد انعكاس صانع السوق.
                     </span>
                   </div>
                 </li>
@@ -119,10 +115,9 @@ export const StrategyMatrixExplainer: React.FC = () => {
                     5
                   </span>
                   <div>
-                    <strong className="text-white">تأكيد السلوك السعري، الفوليوم وMicro BOS:</strong>
+                    <strong className="text-white">زناد الدخول: اختبار فجوة القيمة (FVG) وإزاحة الفوليوم:</strong>
                     <span className="text-slate-400 mr-1">
-                      طفرة في حجم التداول (Volume Surge x1.15) + ذيل رفض شمعة ≥ 20% + كسر هيكل السوق
-                      المصغر.
+                      الدخول عند إعادة اختبار فجوة عدم اتزان السعر (FVG) مدعومة بطفرة حجمية وتأكيد ذيل رفض، مع وقف خسارة ديناميكي مرن (Dynamic ATR Stop).
                     </span>
                   </div>
                 </li>

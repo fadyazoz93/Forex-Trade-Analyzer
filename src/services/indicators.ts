@@ -161,3 +161,323 @@ export function checkVolumeSurge(
   const avgVol = sumVol / 14;
   return bar1.volume >= avgVol * multiplier;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Institutional Upgrade 1: Session VWAP (Volume-Weighted Average Price)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Calculates Intraday Session VWAP
+ * Cumulative (Typical Price * Volume) / Cumulative Volume
+ */
+export function calculateSessionVWAP(candles: Candle[]): {
+  vwap: number;
+  priceAboveVwap: boolean;
+  distancePct: number;
+} {
+  if (!candles || candles.length === 0) {
+    return { vwap: 0, priceAboveVwap: true, distancePct: 0 };
+  }
+
+  // Calculate cumulative sum over recent session bars (e.g. up to last 48 intraday bars)
+  const lookback = Math.min(candles.length, 48);
+  const slice = candles.slice(-lookback);
+
+  let cumulativeTpVol = 0;
+  let cumulativeVol = 0;
+
+  for (const c of slice) {
+    const typicalPrice = (c.high + c.low + c.close) / 3.0;
+    const vol = Math.max(1, c.volume);
+    cumulativeTpVol += typicalPrice * vol;
+    cumulativeVol += vol;
+  }
+
+  const vwap = cumulativeVol > 0 ? cumulativeTpVol / cumulativeVol : slice[slice.length - 1].close;
+  const currentPrice = slice[slice.length - 1].close;
+  const priceAboveVwap = currentPrice >= vwap;
+  const distancePct = vwap > 0 ? Math.abs((currentPrice - vwap) / vwap) * 100 : 0;
+
+  return {
+    vwap: Number(vwap.toFixed(5)),
+    priceAboveVwap,
+    distancePct: Number(distancePct.toFixed(3)),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Institutional Upgrade 2: Volume Profile (POC / VAH / VAL)
+// ─────────────────────────────────────────────────────────────
+
+export interface VolumeProfileCalculation {
+  poc: number;            // Point of Control (Highest Volume Node)
+  vah: number;            // Value Area High (70% Volume Boundary)
+  val: number;            // Value Area Low (70% Volume Boundary)
+  totalVolume: number;
+}
+
+/**
+ * Calculates Horizontal Volume Profile from recent price-action candles
+ */
+export function calculateVolumeProfile(
+  candles: Candle[],
+  binsCount: number = 30
+): VolumeProfileCalculation {
+  if (!candles || candles.length < 5) {
+    return { poc: 0, vah: 0, val: 0, totalVolume: 0 };
+  }
+
+  const lookback = Math.min(candles.length, 60);
+  const slice = candles.slice(-lookback);
+
+  let minPrice = Infinity;
+  let maxPrice = -Infinity;
+  let totalVol = 0;
+
+  for (const c of slice) {
+    if (c.low < minPrice) minPrice = c.low;
+    if (c.high > maxPrice) maxPrice = c.high;
+    totalVol += Math.max(1, c.volume);
+  }
+
+  const priceSpan = maxPrice - minPrice;
+  if (priceSpan <= 0) {
+    const p = slice[slice.length - 1].close;
+    return { poc: p, vah: p, val: p, totalVolume: totalVol };
+  }
+
+  const binStep = priceSpan / binsCount;
+  const bins = new Array(binsCount).fill(0);
+
+  // Distribute volume into price bins
+  for (const c of slice) {
+    const vol = Math.max(1, c.volume);
+    const mid = (c.high + c.low) / 2.0;
+    const binIdx = Math.min(binsCount - 1, Math.max(0, Math.floor((mid - minPrice) / binStep)));
+    bins[binIdx] += vol;
+  }
+
+  // Find POC (bin with max volume)
+  let maxBinVol = -1;
+  let pocBinIdx = 0;
+  for (let i = 0; i < binsCount; i++) {
+    if (bins[i] > maxBinVol) {
+      maxBinVol = bins[i];
+      pocBinIdx = i;
+    }
+  }
+
+  const pocPrice = minPrice + (pocBinIdx + 0.5) * binStep;
+
+  // Calculate Value Area (70% of total volume around POC)
+  const targetAreaVol = totalVol * 0.70;
+  let areaVol = bins[pocBinIdx];
+  let lowerIdx = pocBinIdx;
+  let upperIdx = pocBinIdx;
+
+  while (areaVol < targetAreaVol && (lowerIdx > 0 || upperIdx < binsCount - 1)) {
+    const nextDownVol = lowerIdx > 0 ? bins[lowerIdx - 1] : 0;
+    const nextUpVol = upperIdx < binsCount - 1 ? bins[upperIdx + 1] : 0;
+
+    if (nextDownVol >= nextUpVol && lowerIdx > 0) {
+      lowerIdx--;
+      areaVol += bins[lowerIdx];
+    } else if (upperIdx < binsCount - 1) {
+      upperIdx++;
+      areaVol += bins[upperIdx];
+    } else if (lowerIdx > 0) {
+      lowerIdx--;
+      areaVol += bins[lowerIdx];
+    } else {
+      break;
+    }
+  }
+
+  const valPrice = minPrice + lowerIdx * binStep;
+  const vahPrice = minPrice + (upperIdx + 1) * binStep;
+
+  return {
+    poc: Number(pocPrice.toFixed(5)),
+    vah: Number(vahPrice.toFixed(5)),
+    val: Number(valPrice.toFixed(5)),
+    totalVolume: totalVol,
+  };
+}
+
+/**
+ * Checks confluence between Gann level and Volume Profile (POC / VAH / VAL)
+ */
+export function checkVolumeProfileConfluence(
+  vp: VolumeProfileCalculation,
+  targetPrice: number,
+  point: number,
+  tolerancePips: number = 15
+): {
+  isConfluent: boolean;
+  confluentLevelName: 'POC' | 'VAH' | 'VAL' | 'NONE';
+  confluenceDistancePips: number;
+} {
+  if (vp.poc === 0) {
+    return { isConfluent: false, confluentLevelName: 'NONE', confluenceDistancePips: 999 };
+  }
+
+  const tolerancePrice = tolerancePips * (point * 10);
+
+  const distPOC = Math.abs(targetPrice - vp.poc);
+  const distVAH = Math.abs(targetPrice - vp.vah);
+  const distVAL = Math.abs(targetPrice - vp.val);
+
+  if (distPOC <= tolerancePrice) {
+    return {
+      isConfluent: true,
+      confluentLevelName: 'POC',
+      confluenceDistancePips: Number((distPOC / (point * 10)).toFixed(1)),
+    };
+  }
+
+  if (distVAL <= tolerancePrice) {
+    return {
+      isConfluent: true,
+      confluentLevelName: 'VAL',
+      confluenceDistancePips: Number((distVAL / (point * 10)).toFixed(1)),
+    };
+  }
+
+  if (distVAH <= tolerancePrice) {
+    return {
+      isConfluent: true,
+      confluentLevelName: 'VAH',
+      confluenceDistancePips: Number((distVAH / (point * 10)).toFixed(1)),
+    };
+  }
+
+  const minDistance = Math.min(distPOC, distVAH, distVAL);
+  return {
+    isConfluent: false,
+    confluentLevelName: 'NONE',
+    confluenceDistancePips: Number((minDistance / (point * 10)).toFixed(1)),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Institutional Upgrade 3: Sweep + MSS + FVG Trigger
+// ─────────────────────────────────────────────────────────────
+
+export interface SmcPatternAnalysis {
+  sweepDetected: boolean;
+  mssConfirmed: boolean;
+  hasFvg: boolean;
+  fvgZone?: { top: number; bottom: number };
+  patternDetail: string;
+}
+
+/**
+ * Detects ICT / SMC Liquidity Sweep & Market Structure Shift (MSS) on lower timeframe
+ */
+export function detectLiquiditySweepAndMSS(
+  candles: Candle[],
+  keyGannLevel: number,
+  isLong: boolean,
+  point: number
+): SmcPatternAnalysis {
+  if (!candles || candles.length < 8) {
+    return {
+      sweepDetected: false,
+      mssConfirmed: true,
+      hasFvg: false,
+      patternDetail: 'شموع غير كافية - اعتماد كسر الهيكل الافتراضي',
+    };
+  }
+
+  const recent = candles.slice(-8);
+  const lastBar = recent[recent.length - 1];
+  const prevBar = recent[recent.length - 2];
+  const tolerance = point * 20;
+
+  // 1. Liquidity Sweep: Price pierced beyond the Gann level with a wick but closed back inside
+  let sweepDetected = false;
+  if (isLong) {
+    // Bullish Sweep: Low went below Gann level, but close finished above or near Gann level
+    sweepDetected = recent.some((c) => c.low <= keyGannLevel + tolerance && c.close >= keyGannLevel - tolerance);
+  } else {
+    // Bearish Sweep: High went above Gann level, but close finished below or near Gann level
+    sweepDetected = recent.some((c) => c.high >= keyGannLevel - tolerance && c.close <= keyGannLevel + tolerance);
+  }
+
+  // 2. Market Structure Shift (MSS): Displacement candle breaking opposing recent swing
+  let mssConfirmed = false;
+  if (isLong) {
+    const priorSwingHigh = Math.max(recent[0].high, recent[1].high, recent[2].high);
+    mssConfirmed = prevBar.close > priorSwingHigh || lastBar.close > priorSwingHigh;
+  } else {
+    const priorSwingLow = Math.min(recent[0].low, recent[1].low, recent[2].low);
+    mssConfirmed = prevBar.close < priorSwingLow || lastBar.close < priorSwingLow;
+  }
+
+  // 3. Fair Value Gap (FVG): Imbalance across 3 consecutive candles
+  let hasFvg = false;
+  let fvgZone: { top: number; bottom: number } | undefined = undefined;
+
+  for (let i = recent.length - 1; i >= 2; i--) {
+    const c1 = recent[i - 2];
+    const c3 = recent[i];
+
+    if (isLong && c3.low > c1.high) {
+      // Bullish FVG
+      hasFvg = true;
+      fvgZone = { top: c3.low, bottom: c1.high };
+      break;
+    } else if (!isLong && c3.high < c1.low) {
+      // Bearish FVG
+      hasFvg = true;
+      fvgZone = { top: c1.low, bottom: c3.high };
+      break;
+    }
+  }
+
+  let patternDetail = '';
+  if (sweepDetected && mssConfirmed && hasFvg) {
+    patternDetail = 'نموذج مؤسسي مكتمل: كنس سيولة (Sweep) + كسر هيكل (MSS) + فجوة FVG';
+  } else if (mssConfirmed) {
+    patternDetail = 'كسر هيكل السوق (MSS) مؤكد بزخم صانع السوق';
+  } else if (sweepDetected) {
+    patternDetail = 'كنس سيولة (Sweep) حول مستوى جان - بانتظار إغلاق شمعة التأكيد';
+  } else {
+    patternDetail = 'تتبع تشكل نمط صانع السوق';
+  }
+
+  return {
+    sweepDetected,
+    mssConfirmed,
+    hasFvg,
+    fvgZone,
+    patternDetail,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Institutional Upgrade 4: Dynamic ATR-Based Stop Loss
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Calculates Dynamic Volatility Stop Loss
+ * SL = Gann Level ± (n * ATR)
+ */
+export function calculateDynamicAtrStop(
+  gannLevel: number,
+  atr: number,
+  isLong: boolean,
+  digits: number,
+  multiplier: number = 1.8
+): { slPrice: number; distance: number } {
+  const safeAtr = atr > 0 ? atr : 0.0020;
+  const buffer = safeAtr * multiplier;
+
+  const slPrice = isLong ? gannLevel - buffer : gannLevel + buffer;
+  const distance = Math.abs(gannLevel - slPrice);
+
+  return {
+    slPrice: Number(slPrice.toFixed(digits)),
+    distance: Number(distance.toFixed(digits)),
+  };
+}

@@ -52,16 +52,39 @@ export interface GateStatus {
   value?: string | number;
 }
 
+export interface VolumeProfileResult {
+  poc: number;            // Point of Control (Highest Volume Node)
+  vah: number;            // Value Area High (70% Volume Boundary)
+  val: number;            // Value Area Low (70% Volume Boundary)
+  isConfluent: boolean;   // Confluence with Gann / Sq9 angle
+  confluentLevelName: 'POC' | 'VAH' | 'VAL' | 'NONE';
+  confluenceDistancePips: number;
+}
+
+export interface SessionVwapResult {
+  vwap: number;
+  aligned: boolean;       // Long: Price >= VWAP, Short: Price <= VWAP
+  distancePoints: number;
+}
+
+export interface SmcTriggerResult {
+  sweepDetected: boolean;
+  mssConfirmed: boolean;
+  hasFvg: boolean;
+  fvgZone?: { top: number; bottom: number };
+  triggerDescription: string;
+}
+
 export interface SopGatesEvaluation {
   score: number;
   needed: number;
   passed: boolean;
   direction: 'BUY' | 'SELL' | 'NEUTRAL';
-  gate1_macroAndEma: GateStatus;
-  gate2_gannSq9: GateStatus;
-  gate3_gann1x1AndCycles: GateStatus;
-  gate4_rsi: GateStatus;
-  gate5_priceActionAndBos: GateStatus;
+  gate1_macroAndEma: GateStatus;          // Upgraded with Session VWAP Institutional Bias
+  gate2_gannSq9: GateStatus;              // Upgraded with Volume Profile (POC / VAH / VAL)
+  gate3_gann1x1AndCycles: GateStatus;     // Gann 1x1 Dynamic Slope & Harmonic Cycles
+  gate4_rsi: GateStatus;                  // Upgraded with Liquidity Sweep & MSS (Market Structure Shift)
+  gate5_priceActionAndBos: GateStatus;    // Upgraded with FVG Retest & Volume Displacement
   sq9Level: number;
   structuralSL: number;
   riskDist: number;
@@ -71,6 +94,11 @@ export interface SopGatesEvaluation {
   rsiValue: number;
   dailyEmaValue: number;
   higherTfEmaValue: number;
+  // Advanced Institutional Attributes:
+  volumeProfile?: VolumeProfileResult;
+  sessionVwap?: SessionVwapResult;
+  smcTrigger?: SmcTriggerResult;
+  dynamicAtrStop?: number;
 }
 
 export interface QuadTargets {

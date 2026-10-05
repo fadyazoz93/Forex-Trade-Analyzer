@@ -18,11 +18,16 @@ import {
 } from './gannEngine';
 import {
   calculateATR,
+  calculateDynamicAtrStop,
   calculateEMA,
   calculateRSI,
+  calculateSessionVWAP,
+  calculateVolumeProfile,
   checkCandleRejection,
   checkMicroBOS,
+  checkVolumeProfileConfluence,
   checkVolumeSurge,
+  detectLiquiditySweepAndMSS,
   isTrendSlopeHealthy,
 } from './indicators';
 import { getCandles, getLatestTick } from './marketDataFeed';
@@ -62,7 +67,10 @@ export function evaluateSopGates(
 
   const currentPrice = isLong ? currentTick.ask : currentTick.bid;
 
-  // --- GATE 1: Daily Macro Bias (D1 EMA 50) + H1/H4 200 EMA Trend Alignment + Slope ---
+  // --- GATE 1: Session VWAP Institutional Bias & 200 EMA Macro Trend ---
+  const sessionVwapData = calculateSessionVWAP(h1Candles.length > 0 ? h1Candles : m15Candles);
+  const vwapAligned = isLong ? currentPrice >= sessionVwapData.vwap : currentPrice <= sessionVwapData.vwap;
+
   const d1Ema50 = calculateEMA(d1Candles, 50);
   const latestD1Close = d1Candles.length > 0 ? d1Candles[d1Candles.length - 1].close : currentPrice;
   const latestD1Ema = d1Ema50.length > 0 ? d1Ema50[d1Ema50.length - 1] : currentPrice;
@@ -73,46 +81,55 @@ export function evaluateSopGates(
   const latestH1Ema = h1Ema200.length > 0 ? h1Ema200[h1Ema200.length - 1] : currentPrice;
   const h1TrendAbove = currentPrice >= latestH1Ema;
 
-  // H4 Trend check
-  const h4Ema = calculateEMA(h4Candles, 50);
-  const latestH4Ema = h4Ema.length > 0 ? h4Ema[h4Ema.length - 1] : currentPrice;
-
   // Strict trend alignment: NEVER sell if price is above 200 EMA; NEVER buy if price is below 200 EMA
   const trendAlignmentOk = isLong ? h1TrendAbove : !h1TrendAbove;
   const slopeHealthy = isTrendSlopeHealthy(h1Ema200.length > 0 ? h1Ema200 : d1Ema50, sym.point, isLong, 1.5);
 
-  const gate1Passed = trendAlignmentOk && (dailyMacroOk || slopeHealthy);
+  const gate1Passed = trendAlignmentOk && (vwapAligned || dailyMacroOk || slopeHealthy);
   const gate1: GateStatus = {
     passed: gate1Passed,
-    name: 'Daily Macro & 200 EMA Trend',
-    nameAr: 'الاتجاه العام وموفينج 200 EMA الصارم',
+    name: 'Session VWAP & 200 EMA Institutional Trend',
+    nameAr: 'سيولة Session VWAP المؤسسية وموفينج 200 EMA',
     detail: isLong
-      ? `السعر (${currentPrice.toFixed(sym.digits)}) ≥ موفينج 200 EMA (${latestH1Ema.toFixed(sym.digits)}) [شراء متوافق]`
-      : `السعر (${currentPrice.toFixed(sym.digits)}) ≤ موفينج 200 EMA (${latestH1Ema.toFixed(sym.digits)}) [بيع متوافق]`,
-    value: `${trendAlignmentOk ? '✓ متوافق مع 200 EMA' : '✗ مخالف لموفينج 200'} | H1 EMA: ${latestH1Ema.toFixed(sym.digits)}`,
+      ? `السعر (${currentPrice.toFixed(sym.digits)}) ${vwapAligned ? '≥' : 'قريب من'} VWAP (${sessionVwapData.vwap.toFixed(sym.digits)}) | 200 EMA: ${latestH1Ema.toFixed(sym.digits)} [تدفق تراكمي صاعد]`
+      : `السعر (${currentPrice.toFixed(sym.digits)}) ${vwapAligned ? '≤' : 'قريب من'} VWAP (${sessionVwapData.vwap.toFixed(sym.digits)}) | 200 EMA: ${latestH1Ema.toFixed(sym.digits)} [تدفق تصريفي هابط]`,
+    value: `${vwapAligned ? '✓ متوافق مع VWAP' : '⚠ حول VWAP'} | ${trendAlignmentOk ? '✓ 200 EMA' : '✗ 200 EMA'}`,
   };
 
-  // --- GATE 2: Gann Square of 9 Confluence (مربع التسعة متعدد الدورات) ---
+  // --- GATE 2: Gann Square of 9 & Volume Profile (POC / VAH / VAL) Confluence ---
   const anchor = getLatestGannSwingAnchor(gannAnchorCandles, 2, isLong, 50);
-  let gate2Passed = false;
+  let sq9Confluent = false;
   let targetSq9Level = 0;
   let angleUsed = 0;
 
   if (anchor.found && ((isLong && currentPrice > anchor.price) || (!isLong && currentPrice < anchor.price))) {
     const sq9Res = checkSquareOf9Confluence(currentPrice, anchor.price, isLong, 0.15);
-    gate2Passed = sq9Res.isConfluent;
+    sq9Confluent = sq9Res.isConfluent;
     targetSq9Level = sq9Res.closestLevel;
     angleUsed = sq9Res.angle;
   }
 
+  // Calculate Volume Profile across recent intraday action
+  const vp = calculateVolumeProfile(h1Candles.length >= 20 ? h1Candles : m15Candles, 28);
+  const vpConf = checkVolumeProfileConfluence(
+    vp,
+    targetSq9Level > 0 ? targetSq9Level : currentPrice,
+    sym.point,
+    sym.category === 'metal' ? 25 : 15
+  );
+
+  const gate2Passed = sq9Confluent && (vpConf.isConfluent || (currentPrice >= vp.val && currentPrice <= vp.vah));
+
   const gate2: GateStatus = {
     passed: gate2Passed,
-    name: 'Gann Square of 9 Confluence',
-    nameAr: 'توافق زوايا مربع التسعة لجان (Sq9)',
+    name: 'Gann Sq9 & Volume Profile (POC/VAH/VAL)',
+    nameAr: 'مربع 9 لجان وتوافق بروفايل السيولة الحجمي (POC/VAH/VAL)',
     detail: gate2Passed
-      ? `تطابق سعري مع زاوية ${angleUsed}° لمربع التسعة عند المستوى ${targetSq9Level.toFixed(sym.digits)}`
-      : `لا يوجد توافق لحظي مع زوايا مربع التسعة (نسبة التسامح 15%)`,
-    value: gate2Passed ? `${angleUsed}° (${targetSq9Level.toFixed(sym.digits)})` : 'غير متوافق',
+      ? `تطابق هندسي زاوية ${angleUsed}° لمربع 9 مع عقدة حجمية ${vpConf.confluentLevelName !== 'NONE' ? vpConf.confluentLevelName : 'منطقة القيمة'} (POC: ${vp.poc.toFixed(sym.digits)})`
+      : `زاوية مربع 9: ${angleUsed}° | POC: ${vp.poc.toFixed(sym.digits)} (بانتظار تطابق السيولة)`,
+    value: gate2Passed
+      ? `${angleUsed}° + ${vpConf.confluentLevelName !== 'NONE' ? vpConf.confluentLevelName : 'Value Area'}`
+      : 'غير متوافق',
   };
 
   // --- GATE 3: Gann Dynamic 1x1 Slope & Harmonic Time Cycles ---
@@ -138,32 +155,37 @@ export function evaluateSopGates(
     value: `${priceNear1x1 ? '✓ زاوية 1x1' : '✗ زاوية 1x1'} | ${cycleOk ? '✓ دورة جان' : '✗ دورة'}`,
   };
 
-  // --- GATE 4: RSI Momentum Filter (Clean Intraday Band) ---
+  // --- GATE 4: SMC Liquidity Sweep & Market Structure Shift (MSS) ---
+  const keyLevelForSweep = targetSq9Level > 0 ? targetSq9Level : currentPrice;
+  const smcPattern = detectLiquiditySweepAndMSS(triggerCandles, keyLevelForSweep, isLong, sym.point);
   const rsiValue = calculateRSI(rsiCandles, 14);
-  const gate4Passed = isLong ? rsiValue >= 32.0 && rsiValue <= 58.0 : rsiValue >= 42.0 && rsiValue <= 68.0;
+  const rsiBandOk = isLong ? rsiValue >= 30.0 && rsiValue <= 62.0 : rsiValue >= 38.0 && rsiValue <= 70.0;
+
+  const gate4Passed = (smcPattern.mssConfirmed || smcPattern.sweepDetected) && rsiBandOk;
 
   const gate4: GateStatus = {
     passed: gate4Passed,
-    name: 'RSI Momentum Confirmation',
-    nameAr: 'فلتر زخم RSI (النطاق النظيف للتداول اليومي)',
-    detail: `قيمة RSI الحالية: ${rsiValue.toFixed(1)} (المطلوب اليومي: ${isLong ? '32-58' : '42-68'})`,
-    value: `RSI = ${rsiValue.toFixed(1)}`,
+    name: 'Liquidity Sweep & Market Structure Shift (MSS)',
+    nameAr: 'كنس السيولة (Sweep) وتغير هيكل السوق (MSS)',
+    detail: `${smcPattern.patternDetail} | زخم RSI: ${rsiValue.toFixed(1)}`,
+    value: `${smcPattern.sweepDetected ? '✓ Sweep' : '•'} | ${smcPattern.mssConfirmed ? '✓ MSS' : '•'} | RSI: ${rsiValue.toFixed(1)}`,
   };
 
-  // --- GATE 5: Clean Execution (Volume Surge + Wick Rejection + Micro BOS) ---
+  // --- GATE 5: FVG Retest & Volume Displacement (No Blind Limit Orders) ---
   const volOk = checkVolumeSurge(triggerCandles, 1.10);
   const lastCompletedBar = triggerCandles.length > 1 ? triggerCandles[triggerCandles.length - 2] : triggerCandles[0];
   const paOk = lastCompletedBar ? checkCandleRejection(lastCompletedBar, isLong, 0.18) : true;
   const bosOk = checkMicroBOS(triggerCandles, isLong);
 
-  // Clean execution confirmed if structure breaks with volume or rejection wick (at least 2 confirmations)
-  const gate5Passed = (bosOk && (volOk || paOk)) || (volOk && paOk);
+  // Execution triggered when displacement volume appears or FVG is formed/retested
+  const gate5Passed = (smcPattern.hasFvg && (volOk || paOk)) || (bosOk && volOk) || (smcPattern.mssConfirmed && paOk);
+
   const gate5: GateStatus = {
     passed: gate5Passed,
-    name: 'Volume Surge, Wick Rejection & Micro BOS',
-    nameAr: 'تأكيد السلوك السعري، الفوليوم وكسر الهيكل المصغر (Micro BOS)',
-    detail: `فوليوم متفوق: ${volOk ? 'نعم' : 'لا'} | ذيل رفض: ${paOk ? 'نعم' : 'لا'} | كسر هيكل: ${bosOk ? 'نعم' : 'لا'}`,
-    value: `${volOk ? '✓ Vol' : '✗ Vol'} | ${paOk ? '✓ Wick' : '✗ Wick'} | ${bosOk ? '✓ BOS' : '✗ BOS'}`,
+    name: 'FVG Retest & Volume Displacement Trigger',
+    nameAr: 'زناد الدخول: اختبار فجوة القيمة (FVG) وإزاحة الفوليوم',
+    detail: `فجوة FVG: ${smcPattern.hasFvg ? 'نعم (تم رصد اختلال كفاءة)' : 'لا'} | إزاحة الفوليوم: ${volOk ? 'مرتفعة 🔥' : 'معيارية'} | ذيل رفض: ${paOk ? 'نعم' : 'لا'}`,
+    value: `${smcPattern.hasFvg ? '✓ FVG' : '•'} | ${volOk ? '✓ Displacement' : '•'} | ${paOk ? '✓ Rejection' : '•'}`,
   };
 
   // Total Confluence Score
@@ -174,11 +196,14 @@ export function evaluateSopGates(
     (gate4Passed ? 1 : 0) +
     (gate5Passed ? 1 : 0);
 
-  // Stop loss and risk distance calculation
+  // Dynamic ATR-Based Stop Loss: SL = Gann Level ± (n * ATR)
   const atrTrigger = calculateATR(rsiCandles, 14);
-  const multiplier = sym.category === 'metal' ? 2.5 : 2.0;
+  const dynamicAtrMultiplier = sym.category === 'metal' ? 2.5 : 1.8;
+  const baseGannLevel = targetSq9Level > 0 ? targetSq9Level : currentPrice;
+  const dynamicAtrResult = calculateDynamicAtrStop(baseGannLevel, atrTrigger, isLong, sym.digits, dynamicAtrMultiplier);
 
-  let riskDistFallback = atrTrigger > 0 ? atrTrigger * multiplier : sym.point * 100;
+  // Validate structural safety
+  let riskDistFallback = dynamicAtrResult.distance;
   if (sym.minSLPoints && riskDistFallback < sym.minSLPoints * sym.point) {
     riskDistFallback = sym.minSLPoints * sym.point;
   }
@@ -193,7 +218,11 @@ export function evaluateSopGates(
     sym.point
   );
 
-  const actualRisk = Math.abs(currentPrice - structuralSL);
+  const finalSL = isLong
+    ? Math.min(structuralSL, dynamicAtrResult.slPrice)
+    : Math.max(structuralSL, dynamicAtrResult.slPrice);
+
+  const actualRisk = Math.abs(currentPrice - finalSL);
 
   return {
     score,
@@ -206,7 +235,7 @@ export function evaluateSopGates(
     gate4_rsi: gate4,
     gate5_priceActionAndBos: gate5,
     sq9Level: targetSq9Level || currentPrice,
-    structuralSL,
+    structuralSL: finalSL,
     riskDist: actualRisk || riskDistFallback,
     entryPrice: currentPrice,
     anchorPrice: anchor.price,
@@ -214,6 +243,28 @@ export function evaluateSopGates(
     rsiValue,
     dailyEmaValue: latestD1Ema,
     higherTfEmaValue: latestH1Ema,
+    // Institutional Additions:
+    volumeProfile: {
+      poc: vp.poc,
+      vah: vp.vah,
+      val: vp.val,
+      isConfluent: vpConf.isConfluent,
+      confluentLevelName: vpConf.confluentLevelName,
+      confluenceDistancePips: vpConf.confluenceDistancePips,
+    },
+    sessionVwap: {
+      vwap: sessionVwapData.vwap,
+      aligned: vwapAligned,
+      distancePoints: Math.abs(currentPrice - sessionVwapData.vwap),
+    },
+    smcTrigger: {
+      sweepDetected: smcPattern.sweepDetected,
+      mssConfirmed: smcPattern.mssConfirmed,
+      hasFvg: smcPattern.hasFvg,
+      fvgZone: smcPattern.fvgZone,
+      triggerDescription: smcPattern.patternDetail,
+    },
+    dynamicAtrStop: dynamicAtrResult.slPrice,
   };
 }
 
