@@ -221,7 +221,10 @@ export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true)
       vwapBadge,
       triggerBadge,
       `─────────────────`,
-      `📊 <b>اللوت:</b> <code>${lotStr} Lot</code> (لحساب $1000 / مخاطرة 1% = ${riskDollarsStr})`,
+      `🛡️ <b>إدارة المخاطر الصارمة (Micro-Lot Guard):</b>`,
+      `• <b>حجم العقد الإلزامي:</b> <code>0.01 Lot</code> فقط 🔒`,
+      `• <b>أقصى خسارة عند الوقف:</b> <code>-${riskDollarsStr}</code> فقط`,
+      `⚠️ <i>تنبيه: يُمنع نهائياً فتح لوت أعلى (مثل 1.00) لحماية رأس المال من التراجع!</i>`,
     ].join('\n');
   }
 
@@ -242,7 +245,8 @@ export function formatSignalTelegramMessage(signal: TradeSignal, forHtml = true)
     `• Session VWAP: Institutional Flow Aligned`,
     `• زناد الدخول: Sweep + MSS + FVG Retest`,
     `─────────────────`,
-    `📊 اللوت: ${lotStr} Lot (لحساب $1000 / مخاطرة 1% = ${riskDollarsStr})`,
+    `🛡️ إدارة المخاطر: 0.01 Lot فقط (أقصى خسارة: -${riskDollarsStr})`,
+    `⚠️ لا تفتح لوت أعلى لتفادي الخسائر الكبيرة!`,
   ].join('\n');
 }
 

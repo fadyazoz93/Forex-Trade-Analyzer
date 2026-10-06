@@ -20,10 +20,15 @@ export const ShieldBanner: React.FC<ShieldBannerProps> = ({
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
         {/* Status Indicators */}
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800/70 border border-slate-700/50">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-cyan-950/40 border border-cyan-500/40 text-cyan-300">
             <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span className="text-slate-400 text-[11px] sm:text-xs">درع الاتجاه:</span>
-            <span className="font-semibold text-emerald-400 text-[11px] sm:text-xs">Daily 50 EMA</span>
+            <span className="text-[11px] sm:text-xs">درع اللوت الصارم:</span>
+            <span className="font-bold text-white text-[11px] sm:text-xs">0.01 Lot 🔒</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800/70 border border-slate-700/50">
+            <span className="text-slate-400 text-[11px] sm:text-xs">حماية القيعان:</span>
+            <span className="font-semibold text-emerald-400 text-[11px] sm:text-xs">Anti-Chasing ADR</span>
           </div>
 
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800/70 border border-slate-700/50">

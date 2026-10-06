@@ -122,6 +122,7 @@ export default function App() {
       minMarginLevel: 300,
       maxDailyLossPercent: 5.0,
       dailyTargetProfitPct: 10.0,
+      useStrictMicroLot: true,
     };
   });
 

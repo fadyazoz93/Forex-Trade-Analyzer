@@ -481,3 +481,85 @@ export function calculateDynamicAtrStop(
     distance: Number(distance.toFixed(digits)),
   };
 }
+
+// ─────────────────────────────────────────────────────────────
+// Institutional Upgrade 5: Anti-Chasing & Move Exhaustion Shield
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Calculates Average Daily Range (ADR) from D1 candles
+ */
+export function calculateADR(d1Candles: Candle[], period: number = 14): number {
+  if (!d1Candles || d1Candles.length < 2) return 0;
+  const ranges: number[] = [];
+  const lookback = Math.min(period, d1Candles.length);
+  for (let i = d1Candles.length - lookback; i < d1Candles.length; i++) {
+    ranges.push(d1Candles[i].high - d1Candles[i].low);
+  }
+  const sum = ranges.reduce((acc, r) => acc + r, 0);
+  return sum / ranges.length;
+}
+
+/**
+ * Anti-Chasing & Move Exhaustion Shield
+ * Prevents selling the bottom or buying the top after an extended move
+ */
+export function checkMoveExhaustion(
+  d1Candles: Candle[],
+  currentPrice: number,
+  isLong: boolean,
+  sessionVwap: number,
+  atr: number,
+  point: number
+): { isExhausted: boolean; adrUsagePct: number; reason: string } {
+  if (!d1Candles || d1Candles.length === 0) {
+    return { isExhausted: false, adrUsagePct: 0, reason: '' };
+  }
+
+  const todayBar = d1Candles[d1Candles.length - 1];
+  const dayRange = todayBar.high - todayBar.low;
+  const adr = calculateADR(d1Candles, 14);
+
+  const adrUsagePct = adr > 0 ? Number(((dayRange / adr) * 100).toFixed(1)) : 50;
+
+  // 1. ADR Exhaustion: If day range already consumed >= 75% of ADR and price is sitting at the extreme edge
+  if (adrUsagePct >= 75) {
+    if (!isLong && currentPrice <= todayBar.low + dayRange * 0.20) {
+      // Selling at the absolute bottom of an exhausted day!
+      return {
+        isExhausted: true,
+        adrUsagePct,
+        reason: `حظر ملاحقة السعر: تم استهلاك ${adrUsagePct}% من المدى اليومي (ADR). السعر في قاع النطاق؛ البيع هنا شديد الخطورة وممنوع.`,
+      };
+    }
+    if (isLong && currentPrice >= todayBar.high - dayRange * 0.20) {
+      // Buying at the absolute top of an exhausted day!
+      return {
+        isExhausted: true,
+        adrUsagePct,
+        reason: `حظر ملاحقة السعر: تم استهلاك ${adrUsagePct}% من المدى اليومي (ADR). السعر في قمة النطاق؛ الشراء هنا شديد الخطورة وممنوع.`,
+      };
+    }
+  }
+
+  // 2. Over-extension from Session VWAP (Mean Reversion Risk)
+  if (sessionVwap > 0 && atr > 0) {
+    const vwapDistance = Math.abs(currentPrice - sessionVwap);
+    if (!isLong && currentPrice < sessionVwap && vwapDistance >= 2.2 * atr) {
+      return {
+        isExhausted: true,
+        adrUsagePct,
+        reason: `تشبع بيعي مفرط: السعر يبتعد بأكثر من 2.2 ATR أسفل الـ VWAP. تصحيح صاعد وشيك؛ يُمنع البيع اللحظي.`,
+      };
+    }
+    if (isLong && currentPrice > sessionVwap && vwapDistance >= 2.2 * atr) {
+      return {
+        isExhausted: true,
+        adrUsagePct,
+        reason: `تشبع شرائي مفرط: السعر يبتعد بأكثر من 2.2 ATR أعلى الـ VWAP. تصحيح هابط وشيك؛ يُمنع الشراء اللحظي.`,
+      };
+    }
+  }
+
+  return { isExhausted: false, adrUsagePct, reason: '' };
+}

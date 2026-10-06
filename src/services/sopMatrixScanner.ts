@@ -17,6 +17,7 @@ import {
   getLatestGannSwingAnchor,
 } from './gannEngine';
 import {
+  calculateADR,
   calculateATR,
   calculateDynamicAtrStop,
   calculateEMA,
@@ -25,13 +26,18 @@ import {
   calculateVolumeProfile,
   checkCandleRejection,
   checkMicroBOS,
+  checkMoveExhaustion,
   checkVolumeProfileConfluence,
   checkVolumeSurge,
   detectLiquiditySweepAndMSS,
   isTrendSlopeHealthy,
 } from './indicators';
 import { getCandles, getLatestTick } from './marketDataFeed';
-import { isWeekendMarketClosed } from './shieldMonitor';
+import {
+  isAsianCrossPairBlocked,
+  isLateNyOrRolloverBlocked,
+  isWeekendMarketClosed,
+} from './shieldMonitor';
 
 export interface ScanOptions {
   engine?: EngineMode;
@@ -224,10 +230,22 @@ export function evaluateSopGates(
 
   const actualRisk = Math.abs(currentPrice - finalSL);
 
+  // --- SHIELD: Anti-Chasing & ADR Move Exhaustion Filter ---
+  const exhaustionShield = checkMoveExhaustion(
+    d1Candles,
+    currentPrice,
+    isLong,
+    sessionVwapData.vwap,
+    atrTrigger,
+    sym.point
+  );
+
+  const passed = gate1Passed && score >= 4 && !exhaustionShield.isExhausted;
+
   return {
     score,
     needed: 4,
-    passed: gate1Passed && score >= 4,
+    passed,
     direction: isLong ? 'BUY' : 'SELL',
     gate1_macroAndEma: gate1,
     gate2_gannSq9: gate2,
@@ -265,6 +283,7 @@ export function evaluateSopGates(
       triggerDescription: smcPattern.patternDetail,
     },
     dynamicAtrStop: dynamicAtrResult.slPrice,
+    exhaustionShield,
   };
 }
 
@@ -304,8 +323,18 @@ export function scanMarketWatchSymbols(
 
     candidates.push({ symbol: sym, evalLong, evalShort });
 
-    // Weekend Market Closure Shield: No live signals are ever generated when global markets are closed
+    // 1. Weekend Market Closure Shield: No live signals when global markets are closed
     if (isWeekendMarketClosed()) {
+      return;
+    }
+
+    // 2. Late NY & Rollover Thin Liquidity Shield (19:00 - 23:15 UTC)
+    if (isLateNyOrRolloverBlocked()) {
+      return;
+    }
+
+    // 3. Asian Cross Pairs Shield (Blocks GBPJPY / EURJPY Asian false traps until London Open)
+    if (isAsianCrossPairBlocked(sym.symbol)) {
       return;
     }
 
@@ -594,12 +623,9 @@ export function calculateLotPreview(
   entry: number,
   sl: number,
   balance = 1000,
-  riskPct = 1.0
+  riskPct = 1.0,
+  useStrictMicroLot = true
 ): { lot: number; riskDollars: number; pipRisk: number } {
-  const safeBalance = balance > 0 ? balance : 1000;
-  const safeRiskPct = riskPct > 0 ? riskPct : 1.0;
-  const riskDollars = safeBalance * (safeRiskPct / 100);
-
   const diff = Math.abs(entry - sl);
   let pipRisk = 0;
   if (sym.category === 'metal') {
@@ -609,6 +635,22 @@ export function calculateLotPreview(
   } else {
     pipRisk = Number((diff / 0.0001).toFixed(1));
   }
+
+  // Strict Micro-Lot Mode: Clamped to 0.01 for accounts under $3,000 or when safety is locked
+  if (useStrictMicroLot || balance <= 3000) {
+    const slPoints = diff / sym.point;
+    const pointValuePerLot = (sym.tickValue / sym.tickSize) * sym.point;
+    const exactRiskDollars = Math.max(0.5, slPoints * pointValuePerLot * 0.01);
+    return {
+      lot: 0.01,
+      riskDollars: Number(exactRiskDollars.toFixed(2)),
+      pipRisk: Number(pipRisk.toFixed(1)),
+    };
+  }
+
+  const safeBalance = balance > 0 ? balance : 1000;
+  const safeRiskPct = riskPct > 0 ? riskPct : 1.0;
+  const riskDollars = safeBalance * (safeRiskPct / 100);
 
   const slPoints = diff / sym.point;
   if (slPoints <= 0) {

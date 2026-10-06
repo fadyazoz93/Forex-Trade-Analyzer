@@ -99,6 +99,11 @@ export interface SopGatesEvaluation {
   sessionVwap?: SessionVwapResult;
   smcTrigger?: SmcTriggerResult;
   dynamicAtrStop?: number;
+  exhaustionShield?: {
+    isExhausted: boolean;
+    adrUsagePct: number;
+    reason: string;
+  };
 }
 
 export interface QuadTargets {
@@ -149,6 +154,7 @@ export interface AccountRiskSettings {
   maxTotalLots: number;       // e.g. 5.0
   useAutoLot: boolean;
   fixedLot: number;           // e.g. 0.01
+  useStrictMicroLot?: boolean;// Strict 0.01 Micro-lot safety lock
   maxGlobalPositions: number; // 5
   minMarginLevel: number;     // 300%
   maxDailyLossPercent: number;// 5.0%

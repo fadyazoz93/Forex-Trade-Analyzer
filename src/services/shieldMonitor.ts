@@ -14,6 +14,40 @@ export function isWeekendMarketClosed(date = new Date()): boolean {
   );
 }
 
+/**
+ * Late New York & Rollover Shield: 19:00 - 23:15 UTC
+ * Prevents entries when New York volume dies down and spreads widen.
+ */
+export function isLateNyOrRolloverBlocked(date = new Date()): boolean {
+  const utcHour = date.getUTCHours();
+  const utcMin = date.getUTCMinutes();
+  const curMin = utcHour * 60 + utcMin;
+  return curMin >= 19 * 60 && curMin <= 23 * 60 + 15;
+}
+
+/**
+ * Asian Session Cross-Pairs Shield
+ * Blocks volatile cross pairs (GBPJPY, EURJPY, GBPAUD) during Asian hours (23:00 - 07:30 UTC)
+ * because Asian action is largely a consolidation trap that gets whipped out at London Open.
+ */
+export function isAsianCrossPairBlocked(symbol: string, date = new Date()): boolean {
+  const symClean = symbol.replace(/[^A-Za-z]/g, '').toUpperCase();
+  const isVolatileCross =
+    symClean.includes('GBPJPY') ||
+    symClean.includes('EURJPY') ||
+    symClean.includes('GBPAUD') ||
+    symClean.includes('EURAUD');
+
+  if (!isVolatileCross) return false;
+
+  const utcHour = date.getUTCHours();
+  const utcMin = date.getUTCMinutes();
+  const curMin = utcHour * 60 + utcMin;
+
+  // Between 23:00 UTC and 07:30 UTC (until 30 mins after London opens)
+  return curMin >= 23 * 60 || curMin < 7 * 60 + 30;
+}
+
 export function getShieldStatus(): ShieldStatus {
   const now = new Date();
   const utcDay = now.getUTCDay(); // 0 = Sun, 5 = Fri

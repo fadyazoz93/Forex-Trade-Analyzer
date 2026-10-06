@@ -29,6 +29,7 @@ export const RiskCalculatorModal: React.FC<RiskCalculatorModalProps> = ({
   const [maxRiskDollars, setMaxRiskDollars] = useState(settings.maxRiskDollars);
   const [selectedSymbolId, setSelectedSymbolId] = useState('XAUUSD');
   const [customSlPips, setCustomSlPips] = useState(30);
+  const [useStrictMicroLot, setUseStrictMicroLot] = useState(settings.useStrictMicroLot ?? true);
 
   if (!isOpen) return null;
 
@@ -40,15 +41,22 @@ export const RiskCalculatorModal: React.FC<RiskCalculatorModalProps> = ({
   const slPoints = customSlPips * 10;
 
   let calculatedLot = 0.01;
-  if (slPoints > 0) {
-    calculatedLot =
-      riskDollars / (slPoints * (currentSym.tickValue / currentSym.tickSize * currentSym.point));
+  if (!useStrictMicroLot) {
+    if (slPoints > 0) {
+      calculatedLot =
+        riskDollars / (slPoints * (currentSym.tickValue / currentSym.tickSize * currentSym.point));
+    }
+    if (currentSym.category === 'metal') {
+      calculatedLot *= 0.30; // 30% reduction for metals
+    }
+    calculatedLot = Math.min(settings.maxLotPerTrade, Math.max(currentSym.minLot, calculatedLot));
+    calculatedLot = Number(calculatedLot.toFixed(2));
+  } else {
+    calculatedLot = 0.01;
   }
-  if (currentSym.category === 'metal') {
-    calculatedLot *= 0.30; // 30% reduction for metals
-  }
-  calculatedLot = Math.min(settings.maxLotPerTrade, Math.max(currentSym.minLot, calculatedLot));
-  calculatedLot = Number(calculatedLot.toFixed(2));
+
+  const pointValPerLot = (currentSym.tickValue / currentSym.tickSize) * currentSym.point;
+  const actualRiskForLot = (slPoints * pointValPerLot * calculatedLot).toFixed(2);
 
   const handleSave = () => {
     onSaveSettings({
@@ -56,6 +64,7 @@ export const RiskCalculatorModal: React.FC<RiskCalculatorModalProps> = ({
       balance,
       riskPercent,
       maxRiskDollars,
+      useStrictMicroLot,
     });
     onClose();
   };
@@ -153,19 +162,45 @@ export const RiskCalculatorModal: React.FC<RiskCalculatorModalProps> = ({
             </div>
           </div>
 
+          {/* Strict Micro-Lot 0.01 Shield Switch */}
+          <div className="p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <Shield className="w-5 h-5 text-cyan-400 shrink-0" />
+              <div>
+                <strong className="text-xs text-white block">
+                  درع تثبيت 0.01 Lot الصارم (Strict Micro-Lot Guard)
+                </strong>
+                <p className="text-[11px] text-slate-400">
+                  قفل العقد عند 0.01 لوت وحظر الأحجام الكبيرة لحماية الحساب من أي تراجع مفاجئ
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUseStrictMicroLot(!useStrictMicroLot)}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer ${
+                useStrictMicroLot
+                  ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                  : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              {useStrictMicroLot ? '✓ مفعل (0.01 صارم)' : 'غير مفعل (حساب تلقائي)'}
+            </button>
+          </div>
+
           {/* Results Display */}
           <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 font-mono">
             <div className="flex items-center justify-between text-xs text-slate-400">
               <span>المبلغ المعرض للمخاطرة:</span>
               <span className="text-sm font-bold text-amber-400 font-mono">
-                ${riskDollars.toFixed(2)}
+                ${useStrictMicroLot ? actualRiskForLot : riskDollars.toFixed(2)}
               </span>
             </div>
 
             <div className="flex items-center justify-between text-xs text-slate-400">
-              <span>تخفيض لوت المعادن النفيسة:</span>
+              <span>نمط العقد المعتمد:</span>
               <span className="font-bold text-cyan-400">
-                {currentSym.category === 'metal' ? 'مطبق (30% من الحجم الأصلي)' : 'غير مطلوب'}
+                {useStrictMicroLot ? '🔒 0.01 Micro-Lot مقفل للأمان' : 'ديناميكي معادل للمخاطرة'}
               </span>
             </div>
 
