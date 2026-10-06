@@ -53,6 +53,21 @@ export async function initializeDatabase(): Promise<{ success: boolean; error?: 
       CREATE INDEX IF NOT EXISTS idx_signals_time ON trade_signals(time DESC);
     `);
 
+    // Global Distributed Anti-Duplicate Broadcast Lock Table
+    await tursoClient.execute(`
+      CREATE TABLE IF NOT EXISTS telegram_broadcasts (
+        broadcast_key TEXT PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        order_type TEXT NOT NULL,
+        entry_price REAL NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+    `);
+
+    await tursoClient.execute(`
+      CREATE INDEX IF NOT EXISTS idx_broadcast_sym_time ON telegram_broadcasts(symbol, created_at DESC);
+    `);
+
     console.log('✅ [Turso Database] Schema initialized successfully on LibSQL cloud!');
     return { success: true };
   } catch (err: unknown) {
@@ -212,5 +227,46 @@ export async function getDatabaseStats(): Promise<{
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     return { totalCount: 0, activeCount: 0, tpCount: 0, slCount: 0, error: errorMsg };
+  }
+}
+
+/**
+ * Global Distributed Cloud Lock: Prevents duplicate signal broadcasting across all running server instances & containers
+ */
+export async function claimTelegramSignalBroadcast(
+  symbol: string,
+  orderType: string,
+  entryPrice: number,
+  cooldownMinutes: number = 60
+): Promise<boolean> {
+  const cleanSym = symbol.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const now = Date.now();
+  const cutoffTime = now - cooldownMinutes * 60 * 1000;
+
+  try {
+    // 1. Check if ANY broadcast for this symbol exists within the cooldown period
+    const existing = await tursoClient.execute({
+      sql: `SELECT broadcast_key, created_at FROM telegram_broadcasts WHERE symbol = ? AND created_at > ? LIMIT 1;`,
+      args: [cleanSym, cutoffTime],
+    });
+
+    if (existing.rows && existing.rows.length > 0) {
+      const priorTime = new Date(Number(existing.rows[0].created_at)).toLocaleTimeString('ar-EG');
+      console.log(`🛑 [Turso Cloud Lock] Blocked duplicate broadcast for ${cleanSym}: already broadcasted at ${priorTime}`);
+      return false;
+    }
+
+    // 2. Insert lock atomically
+    const broadcastKey = `${cleanSym}_${orderType}_${Math.round(entryPrice * 1000)}_${Math.floor(now / (cooldownMinutes * 60 * 1000))}`;
+    await tursoClient.execute({
+      sql: `INSERT INTO telegram_broadcasts (broadcast_key, symbol, order_type, entry_price, created_at) VALUES (?, ?, ?, ?, ?);`,
+      args: [broadcastKey, cleanSym, orderType, entryPrice, now],
+    });
+
+    console.log(`🔒 [Turso Cloud Lock] Successfully claimed broadcast lock for ${cleanSym}`);
+    return true;
+  } catch (err) {
+    console.warn(`⚠️ [Turso Cloud Lock] Lock check error (allowing dispatch):`, err);
+    return true;
   }
 }

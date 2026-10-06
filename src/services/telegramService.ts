@@ -84,9 +84,9 @@ export async function sendTelegramMultiTarget(
   targetIds: string[] | string,
   messageHtml: string
 ): Promise<TelegramSendResult> {
-  const targets = (Array.isArray(targetIds) ? targetIds : [targetIds])
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0);
+  const rawTargets = Array.isArray(targetIds) ? targetIds : [targetIds];
+  // Strict deduplication: ensure no ID appears more than once
+  const targets = Array.from(new Set(rawTargets.map((t) => t.trim()))).filter((t) => t.length > 0);
 
   if (targets.length === 0) {
     return { success: false, error: 'لم يتم تحديد وجهة إرسال صالحة (قناة أو محادثة)' };
@@ -455,7 +455,7 @@ export async function sendTradeSignalToTelegram(
 
   // Anti-Duplicate Protection: block repeating signal for the SAME currency in the same time frame
   const cleanSym = normalizeSymbolKey(signal.symbol);
-  if (!skipDuplicateCheck && isSameSymbolRecentlyDispatched(cleanSym)) {
+  if (!skipDuplicateCheck && isSameSymbolRecentlyDispatched(cleanSym, 60 * 60 * 1000)) {
     console.warn(`🛑 [Telegram Anti-Duplicate] Blocked repeated signal for ${signal.symbol}: already dispatched recently.`);
     return {
       success: false,
@@ -463,11 +463,15 @@ export async function sendTradeSignalToTelegram(
     };
   }
 
+  // Pre-emptively record dispatch to avoid concurrent race conditions
+  recordSymbolDispatched(cleanSym);
+
   const msg = formatSignalTelegramMessage(signal, true);
   const result = await sendTelegramMultiTarget(token, targetIds, msg);
 
-  if (result.success) {
-    recordSymbolDispatched(cleanSym);
+  if (!result.success) {
+    // If delivery failed completely, release the lock
+    clearSymbolDispatched(cleanSym);
   }
 
   return result;

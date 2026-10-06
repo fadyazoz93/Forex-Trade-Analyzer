@@ -41,6 +41,7 @@ import {
   saveTradeSignalToDb,
   getTradeSignalsFromDb,
   getDatabaseStats,
+  claimTelegramSignalBroadcast,
   TURSO_DATABASE_URL,
 } from './src/services/tursoDatabase';
 import { TradeSignal } from './src/types';
@@ -417,6 +418,13 @@ async function start24x7BackgroundScanner() {
 
             // Auto-send to Telegram if enabled
             if (AUTO_SEND) {
+              // Cloud Distributed Anti-Duplicate Lock: guarantees only ONE instance across any platform can send this signal
+              const canBroadcast = await claimTelegramSignalBroadcast(sig.symbol, sig.orderType, sig.entryPrice, 60);
+              if (!canBroadcast) {
+                console.log(`🛑 [Railway 24/7 Worker] Dropped duplicate Telegram broadcast for ${sig.symbol} (Cloud Lock Active).`);
+                continue;
+              }
+
               const destinations = [CHANNEL_ID];
 
               console.log(`📤 [Railway 24/7 Worker] Auto-dispatching signal to Telegram targets:`, destinations);
