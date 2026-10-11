@@ -86,13 +86,13 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
   const displayedSignals = signals.filter((s) => {
     if (feedTab === 'active') return s.status === 'ACTIVE' && !s.highestTargetHit;
     if (feedTab === 'targets_hit') return s.highestTargetHit !== null && s.status !== 'SL_HIT';
-    if (feedTab === 'closed') return s.status === 'TP4_HIT' || s.status === 'SL_HIT';
+    if (feedTab === 'closed') return s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'BREAKEVEN_HIT';
     return true;
   });
 
   const activeCount = signals.filter((s) => s.status === 'ACTIVE' && !s.highestTargetHit).length;
   const hitCount = signals.filter((s) => s.highestTargetHit !== null && s.status !== 'SL_HIT').length;
-  const closedCount = signals.filter((s) => s.status === 'TP4_HIT' || s.status === 'SL_HIT').length;
+  const closedCount = signals.filter((s) => s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'BREAKEVEN_HIT').length;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
@@ -294,6 +294,10 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                         ) : signal.status === 'SL_HIT' ? (
                           <span className="text-[11px] px-2 py-0.5 rounded-full font-black bg-rose-500/25 text-rose-300 border border-rose-500/50 flex items-center gap-1 font-mono">
                             🛑 ضرب الوقف
+                          </span>
+                        ) : signal.status === 'BREAKEVEN_HIT' ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-black bg-blue-500/25 text-blue-300 border border-blue-500/50 flex items-center gap-1 font-mono">
+                            🔒 خروج بنقطة الدخول (محمية)
                           </span>
                         ) : signal.highestTargetHit === 'TP3' ? (
                           <span className="text-[11px] px-2 py-0.5 rounded-full font-black bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 flex items-center gap-1 font-mono">
@@ -641,7 +645,7 @@ export const SignalFeed: React.FC<SignalFeedProps> = ({
                     const cleanCurrent = signal.symbol.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
                     const otherSentSameSymbol = signals.some((s) => {
                       const cleanOther = s.symbol.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-                      const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'CANCELLED';
+                      const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'BREAKEVEN_HIT' || s.status === 'CANCELLED';
                       return cleanOther === cleanCurrent && s.id !== signal.id && s.telegramSent && !isClosed;
                     });
                     const isAlreadySent = signal.telegramSent || otherSentSameSymbol;

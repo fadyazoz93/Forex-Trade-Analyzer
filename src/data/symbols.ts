@@ -28,7 +28,8 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     tickValue: 1.0,
     tickSize: 0.01,
     metalsReduction: 0.30, // 30% lot reduction rule
-    minSLPoints: 400,      // Minimum $4.00 ATR cushion for gold to avoid noise
+    minSLPoints: 250,      // Minimum $2.50 ATR cushion for gold
+    maxSLPoints: 450,      // Hard ceiling: max $4.50 stop loss (prevents wide 50-dollar stops!)
   },
   {
     id: 'GBPJPY',
@@ -48,7 +49,8 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     lotStep: 0.01,
     tickValue: 6.60,
     tickSize: 0.001,
-    minSLPoints: 240, // Minimum 24 pips ATR buffer for GBPJPY
+    minSLPoints: 200, // Minimum 20 pips ATR buffer for GBPJPY
+    maxSLPoints: 380, // Hard ceiling: max 38 pips
   },
   {
     id: 'EURUSD',
@@ -68,7 +70,8 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     lotStep: 0.01,
     tickValue: 10.0,
     tickSize: 0.00001,
-    minSLPoints: 180, // Minimum 18 pips ATR buffer for EURUSD to prevent premature stopouts
+    minSLPoints: 150, // Minimum 15 pips ATR buffer for EURUSD
+    maxSLPoints: 280, // Hard ceiling: max 28 pips
   },
   {
     id: 'USDJPY',
@@ -88,7 +91,8 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     lotStep: 0.01,
     tickValue: 6.60,
     tickSize: 0.001,
-    minSLPoints: 200, // Minimum 20 pips ATR buffer for USDJPY
+    minSLPoints: 180, // Minimum 18 pips ATR buffer for USDJPY
+    maxSLPoints: 320, // Hard ceiling: max 32 pips
   },
 ];
 

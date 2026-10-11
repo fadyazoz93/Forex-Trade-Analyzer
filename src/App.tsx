@@ -307,7 +307,7 @@ export default function App() {
     const cleanSym = normalizeSymbolKey(newSignal.symbol);
     const alreadyActive = activeSignalsRef.current.some((s) => {
       const sClean = normalizeSymbolKey(s.symbol);
-      const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'CANCELLED';
+      const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'BREAKEVEN_HIT' || s.status === 'CANCELLED';
       return sClean === cleanSym && !isClosed;
     });
     if (alreadyActive) return;
@@ -382,7 +382,7 @@ export default function App() {
         const sigClean = normalizeSymbolKey(sig.symbol);
         const hasActive = activeSignalsRef.current.some((active) => {
           const activeClean = normalizeSymbolKey(active.symbol);
-          const isClosed = active.status === 'TP4_HIT' || active.status === 'SL_HIT' || active.status === 'CANCELLED';
+          const isClosed = active.status === 'TP4_HIT' || active.status === 'SL_HIT' || active.status === 'BREAKEVEN_HIT' || active.status === 'CANCELLED';
           return activeClean === sigClean && !isClosed;
         });
         return !hasActive;
@@ -432,7 +432,7 @@ export default function App() {
     // Prevent duplicate sending if this signal was already sent or another active signal for this currency was already sent
     const alreadySentActiveSignal = activeSignals.some((s) => {
       const sClean = normalizeSymbolKey(s.symbol);
-      const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'CANCELLED';
+      const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'BREAKEVEN_HIT' || s.status === 'CANCELLED';
       return sClean === cleanSym && s.id !== signal.id && s.telegramSent && !isClosed;
     });
 

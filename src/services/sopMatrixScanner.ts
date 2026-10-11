@@ -18,6 +18,7 @@ import {
 } from './gannEngine';
 import {
   calculateADR,
+  calculateADX,
   calculateATR,
   calculateDynamicAtrStop,
   calculateEMA,
@@ -25,6 +26,7 @@ import {
   calculateSessionVWAP,
   calculateVolumeProfile,
   checkCandleRejection,
+  checkCorrectionD1Trend,
   checkMicroBOS,
   checkMoveExhaustion,
   checkVolumeProfileConfluence,
@@ -38,6 +40,25 @@ import {
   isLateNyOrRolloverBlocked,
   isWeekendMarketClosed,
 } from './shieldMonitor';
+
+// ─────────────────────────────────────────────────────────────
+// Post-SL Cooldown Penalty Shield (6 Hours Freeze per Symbol)
+// ─────────────────────────────────────────────────────────────
+const symbolSlHitPenalty = new Map<string, number>();
+const SL_COOLDOWN_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+export function recordSymbolSlHit(symbol: string): void {
+  const clean = symbol.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  symbolSlHitPenalty.set(clean, Date.now());
+  console.log(`🛑 [SL Penalty Box] Symbol ${clean} is frozen for 6 hours after hitting Stop Loss.`);
+}
+
+export function isSymbolInSlCooldown(symbol: string): boolean {
+  const clean = symbol.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const lastSlTime = symbolSlHitPenalty.get(clean);
+  if (!lastSlTime) return false;
+  return Date.now() - lastSlTime < SL_COOLDOWN_DURATION_MS;
+}
 
 export interface ScanOptions {
   engine?: EngineMode;
@@ -91,15 +112,33 @@ export function evaluateSopGates(
   const trendAlignmentOk = isLong ? h1TrendAbove : !h1TrendAbove;
   const slopeHealthy = isTrendSlopeHealthy(h1Ema200.length > 0 ? h1Ema200 : d1Ema50, sym.point, isLong, 1.5);
 
-  const gate1Passed = trendAlignmentOk && (vwapAligned || dailyMacroOk || slopeHealthy);
+  // ADX Choppiness Filter: If ADX < 20, market is in choppy non-trending range (prevents USDJPY 6x chop traps)
+  const adxVal = calculateADX(trendCandles, 14);
+  const trendHasMomentum = adxVal >= 20;
+
+  // Multi-day correction filter: prevents buying into heavy multi-day downward cascades
+  const correctionCheck = checkCorrectionD1Trend(d1Candles, isLong);
+  const correctionHealthy = correctionCheck.isHealthy;
+
+  const gate1Passed = trendAlignmentOk && (vwapAligned || dailyMacroOk || slopeHealthy) && trendHasMomentum && correctionHealthy;
+  
+  let gate1Detail = '';
+  if (!trendHasMomentum) {
+    gate1Detail = `سوق في نطاق تذبذب عرضي رتيب (ADX = ${adxVal} < 20) - التداول محظور لتجنب الفخاخ`;
+  } else if (!correctionHealthy) {
+    gate1Detail = correctionCheck.reason;
+  } else {
+    gate1Detail = isLong
+      ? `السعر (${currentPrice.toFixed(sym.digits)}) ${vwapAligned ? '≥' : 'قريب من'} VWAP (${sessionVwapData.vwap.toFixed(sym.digits)}) | 200 EMA: ${latestH1Ema.toFixed(sym.digits)} [تدفق تراكمي صاعد]`
+      : `السعر (${currentPrice.toFixed(sym.digits)}) ${vwapAligned ? '≤' : 'قريب من'} VWAP (${sessionVwapData.vwap.toFixed(sym.digits)}) | 200 EMA: ${latestH1Ema.toFixed(sym.digits)} [تدفق تصريفي هابط]`;
+  }
+
   const gate1: GateStatus = {
     passed: gate1Passed,
-    name: 'Session VWAP & 200 EMA Institutional Trend',
-    nameAr: 'سيولة Session VWAP المؤسسية وموفينج 200 EMA',
-    detail: isLong
-      ? `السعر (${currentPrice.toFixed(sym.digits)}) ${vwapAligned ? '≥' : 'قريب من'} VWAP (${sessionVwapData.vwap.toFixed(sym.digits)}) | 200 EMA: ${latestH1Ema.toFixed(sym.digits)} [تدفق تراكمي صاعد]`
-      : `السعر (${currentPrice.toFixed(sym.digits)}) ${vwapAligned ? '≤' : 'قريب من'} VWAP (${sessionVwapData.vwap.toFixed(sym.digits)}) | 200 EMA: ${latestH1Ema.toFixed(sym.digits)} [تدفق تصريفي هابط]`,
-    value: `${vwapAligned ? '✓ متوافق مع VWAP' : '⚠ حول VWAP'} | ${trendAlignmentOk ? '✓ 200 EMA' : '✗ 200 EMA'}`,
+    name: 'Session VWAP, 200 EMA & ADX Trend',
+    nameAr: 'سيولة Session VWAP المؤسسية وموفينج 200 وزخم ADX',
+    detail: gate1Detail,
+    value: `${trendHasMomentum ? `✓ ADX: ${adxVal}` : `✗ Chop: ${adxVal}`} | ${trendAlignmentOk ? '✓ 200 EMA' : '✗ 200 EMA'}`,
   };
 
   // --- GATE 2: Gann Square of 9 & Volume Profile (POC / VAH / VAL) Confluence ---
@@ -208,27 +247,36 @@ export function evaluateSopGates(
   const baseGannLevel = targetSq9Level > 0 ? targetSq9Level : currentPrice;
   const dynamicAtrResult = calculateDynamicAtrStop(baseGannLevel, atrTrigger, isLong, sym.digits, dynamicAtrMultiplier);
 
-  // Validate structural safety
-  let riskDistFallback = dynamicAtrResult.distance;
-  if (sym.minSLPoints && riskDistFallback < sym.minSLPoints * sym.point) {
-    riskDistFallback = sym.minSLPoints * sym.point;
+  // --- CONTROLLED VOLATILITY STOP LOSS (HARD CAP & DOLLAR GUARD) ---
+  let safeDistance = dynamicAtrResult.distance;
+
+  // 1. Minimum SL Points Cushion (prevent noise stop-outs)
+  if (sym.minSLPoints && safeDistance < sym.minSLPoints * sym.point) {
+    safeDistance = sym.minSLPoints * sym.point;
   }
 
-  const structuralSL = calculateStructuralSL(
-    gannAnchorCandles,
-    isLong,
-    currentPrice,
-    riskDistFallback,
-    trendAtr,
-    sym.digits,
-    sym.point
+  // 2. Strict Maximum SL Points Ceiling (Prevents distant anchor pivots from blowing up SL)
+  if (sym.maxSLPoints && safeDistance > sym.maxSLPoints * sym.point) {
+    safeDistance = sym.maxSLPoints * sym.point;
+  }
+
+  // 3. Absolute Hard Dollar Loss Guard:
+  // On a 0.01 micro lot, the maximum loss at stop MUST NEVER EXCEED $4.50!
+  const pointValuePerLot = (sym.tickValue / sym.tickSize) * sym.point;
+  if (pointValuePerLot > 0) {
+    const maxDollarLossPoints = 4.50 / (0.01 * pointValuePerLot);
+    const maxSafeDollarDistance = maxDollarLossPoints * sym.point;
+    if (safeDistance > maxSafeDollarDistance) {
+      safeDistance = maxSafeDollarDistance;
+    }
+  }
+
+  // Stop Loss is directly and safely pegged to safeDistance from current entry!
+  const finalSL = Number(
+    (isLong ? currentPrice - safeDistance : currentPrice + safeDistance).toFixed(sym.digits)
   );
 
-  const finalSL = isLong
-    ? Math.min(structuralSL, dynamicAtrResult.slPrice)
-    : Math.max(structuralSL, dynamicAtrResult.slPrice);
-
-  const actualRisk = Math.abs(currentPrice - finalSL);
+  const actualRisk = Number(safeDistance.toFixed(sym.digits));
 
   // --- SHIELD: Anti-Chasing & ADR Move Exhaustion Filter ---
   const exhaustionShield = checkMoveExhaustion(
@@ -254,7 +302,7 @@ export function evaluateSopGates(
     gate5_priceActionAndBos: gate5,
     sq9Level: targetSq9Level || currentPrice,
     structuralSL: finalSL,
-    riskDist: actualRisk || riskDistFallback,
+    riskDist: actualRisk > 0 ? actualRisk : Number((sym.volatilityAtr || 0.005).toFixed(sym.digits)),
     entryPrice: currentPrice,
     anchorPrice: anchor.price,
     barsElapsed,
@@ -338,6 +386,11 @@ export function scanMarketWatchSymbols(
       return;
     }
 
+    // 4. Post-SL Cooldown Penalty Shield: Freeze symbol for 6 hours if it recently hit Stop Loss!
+    if (isSymbolInSlCooldown(sym.symbol)) {
+      return;
+    }
+
     // Check if long triggers
     if (evalLong.passed && evalLong.score >= (options.scoreNeeded || 4)) {
       const liveEntryPrice = tick.ask;
@@ -347,7 +400,19 @@ export function scanMarketWatchSymbols(
         structuralSL = Number((liveEntryPrice - riskDistance).toFixed(sym.digits));
       }
       const actualRisk = Math.abs(liveEntryPrice - structuralSL);
+
+      // Spread-to-Stop Ratio Shield: if broker spread eats > 18% of SL, reject
+      const spreadDist = tick.spreadPts * sym.point;
+      if (spreadDist > actualRisk * 0.18) {
+        return;
+      }
+
       const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, true, sym.digits);
+      // Minimum R:R Shield: ensure TP2 is at least 1.2x risk
+      if (Math.abs(quadTP.tp2 - liveEntryPrice) < actualRisk * 1.2) {
+        return;
+      }
+
       const lotInfo = calculateLotPreview(sym, liveEntryPrice, structuralSL);
 
       signals.push({
@@ -385,7 +450,19 @@ export function scanMarketWatchSymbols(
         structuralSL = Number((liveEntryPrice + riskDistance).toFixed(sym.digits));
       }
       const actualRisk = Math.abs(liveEntryPrice - structuralSL);
+
+      // Spread-to-Stop Ratio Shield: if broker spread eats > 18% of SL, reject
+      const spreadDist = tick.spreadPts * sym.point;
+      if (spreadDist > actualRisk * 0.18) {
+        return;
+      }
+
       const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, false, sym.digits);
+      // Minimum R:R Shield: ensure TP2 is at least 1.2x risk
+      if (Math.abs(quadTP.tp2 - liveEntryPrice) < actualRisk * 1.2) {
+        return;
+      }
+
       const lotInfo = calculateLotPreview(sym, liveEntryPrice, structuralSL);
 
       signals.push({
@@ -437,8 +514,23 @@ export function evaluateSingleSymbolOnTick(
 
   let newSignal: TradeSignal | null = null;
 
-  // If market is closed on weekend, do not generate live signals
+  // 1. Weekend Market Closure Shield
   if (isWeekendMarketClosed()) {
+    return { newSignal: null, evalLong, evalShort };
+  }
+
+  // 2. Late New York & High-Spread Rollover Shield (19:00 - 23:15 UTC)
+  if (isLateNyOrRolloverBlocked()) {
+    return { newSignal: null, evalLong, evalShort };
+  }
+
+  // 3. Asian Cross Pairs Shield (Blocks volatile GBPJPY / EURJPY Asian traps)
+  if (isAsianCrossPairBlocked(sym.symbol)) {
+    return { newSignal: null, evalLong, evalShort };
+  }
+
+  // 4. Post-SL Cooldown Penalty Shield (Freeze for 6h after taking a stop loss)
+  if (isSymbolInSlCooldown(sym.symbol)) {
     return { newSignal: null, evalLong, evalShort };
   }
 
@@ -450,7 +542,19 @@ export function evaluateSingleSymbolOnTick(
       structuralSL = Number((liveEntryPrice - riskDistance).toFixed(sym.digits));
     }
     const actualRisk = Math.abs(liveEntryPrice - structuralSL);
+
+    // Spread-to-Stop Ratio Shield: reject if spread consumes > 18% of SL
+    const spreadDist = currentTick.spreadPts * sym.point;
+    if (spreadDist > actualRisk * 0.18) {
+      return { newSignal: null, evalLong, evalShort };
+    }
+
     const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, true, sym.digits);
+    // Minimum R:R Shield: ensure TP2 is at least 1.2x risk
+    if (Math.abs(quadTP.tp2 - liveEntryPrice) < actualRisk * 1.2) {
+      return { newSignal: null, evalLong, evalShort };
+    }
+
     const lotInfo = calculateLotPreview(sym, liveEntryPrice, structuralSL);
 
     newSignal = {
@@ -494,7 +598,19 @@ export function evaluateSingleSymbolOnTick(
       structuralSL = Number((liveEntryPrice + riskDistance).toFixed(sym.digits));
     }
     const actualRisk = Math.abs(liveEntryPrice - structuralSL);
+
+    // Spread-to-Stop Ratio Shield: reject if spread consumes > 18% of SL
+    const spreadDist = currentTick.spreadPts * sym.point;
+    if (spreadDist > actualRisk * 0.18) {
+      return { newSignal: null, evalLong, evalShort };
+    }
+
     const quadTP = calculateQuadTargets(liveEntryPrice, actualRisk, false, sym.digits);
+    // Minimum R:R Shield: ensure TP2 is at least 1.2x risk
+    if (Math.abs(quadTP.tp2 - liveEntryPrice) < actualRisk * 1.2) {
+      return { newSignal: null, evalLong, evalShort };
+    }
+
     const lotInfo = calculateLotPreview(sym, liveEntryPrice, structuralSL);
 
     newSignal = {
@@ -580,7 +696,12 @@ export function updateSignalRealtimeMetrics(
 
     const effectiveSL = breakEvenActive ? Math.max(signal.slPrice, trailingSlPrice) : signal.slPrice;
     if (currentPrice <= effectiveSL && status === 'ACTIVE') {
-      status = 'SL_HIT';
+      if (breakEvenActive) {
+        status = 'BREAKEVEN_HIT';
+      } else {
+        status = 'SL_HIT';
+        recordSymbolSlHit(signal.symbol);
+      }
     }
   } else {
     // SELL
@@ -601,7 +722,12 @@ export function updateSignalRealtimeMetrics(
 
     const effectiveSL = breakEvenActive ? Math.min(signal.slPrice, trailingSlPrice) : signal.slPrice;
     if (currentPrice >= effectiveSL && status === 'ACTIVE') {
-      status = 'SL_HIT';
+      if (breakEvenActive) {
+        status = 'BREAKEVEN_HIT';
+      } else {
+        status = 'SL_HIT';
+        recordSymbolSlHit(signal.symbol);
+      }
     }
   }
 

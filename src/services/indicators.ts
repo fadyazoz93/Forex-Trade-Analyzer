@@ -563,3 +563,96 @@ export function checkMoveExhaustion(
 
   return { isExhausted: false, adrUsagePct, reason: '' };
 }
+
+// ─────────────────────────────────────────────────────────────
+// Institutional Upgrade 6: Choppiness & Multi-Day Correction Filters
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Calculates Directional Movement Index (ADX) to detect choppy sideways markets
+ */
+export function calculateADX(candles: Candle[], period: number = 14): number {
+  if (!candles || candles.length < period + 2) return 25; // default neutral trending
+
+  const trList: number[] = [];
+  const plusDmList: number[] = [];
+  const minusDmList: number[] = [];
+
+  for (let i = 1; i < candles.length; i++) {
+    const cur = candles[i];
+    const prev = candles[i - 1];
+
+    const tr = Math.max(
+      cur.high - cur.low,
+      Math.abs(cur.high - prev.close),
+      Math.abs(cur.low - prev.close)
+    );
+    trList.push(tr);
+
+    const upMove = cur.high - prev.high;
+    const downMove = prev.low - cur.low;
+
+    plusDmList.push(upMove > downMove && upMove > 0 ? upMove : 0);
+    minusDmList.push(downMove > upMove && downMove > 0 ? downMove : 0);
+  }
+
+  const lookback = Math.min(period, trList.length);
+  const recentTr = trList.slice(-lookback).reduce((a, b) => a + b, 0);
+  const recentPlusDm = plusDmList.slice(-lookback).reduce((a, b) => a + b, 0);
+  const recentMinusDm = minusDmList.slice(-lookback).reduce((a, b) => a + b, 0);
+
+  if (recentTr === 0) return 20;
+
+  const plusDi = (recentPlusDm / recentTr) * 100;
+  const minusDi = (recentMinusDm / recentTr) * 100;
+
+  const diSum = plusDi + minusDi;
+  if (diSum === 0) return 20;
+
+  const dx = (Math.abs(plusDi - minusDi) / diSum) * 100;
+  return Number(dx.toFixed(1));
+}
+
+/**
+ * Validates that current price action is not counter to an active multi-day correction
+ */
+export function checkCorrectionD1Trend(
+  d1Candles: Candle[],
+  isLong: boolean
+): { isHealthy: boolean; reason: string } {
+  if (!d1Candles || d1Candles.length < 3) return { isHealthy: true, reason: '' };
+
+  const lastCompletedD1 = d1Candles[d1Candles.length - 2];
+  const priorD1 = d1Candles[d1Candles.length - 3];
+
+  if (isLong) {
+    // If the last 2 completed daily candles were both heavy bearish closes with lower lows
+    const isHeavyBearishTrend =
+      lastCompletedD1.close < lastCompletedD1.open &&
+      priorD1.close < priorD1.open &&
+      lastCompletedD1.low < priorD1.low;
+
+    if (isHeavyBearishTrend) {
+      return {
+        isHealthy: false,
+        reason: 'تصحيح هابط مستمر على اليومي (شمعتان هابطتان متتاليتان) - ممنوع الشراء ضد مسار اليوم',
+      };
+    }
+  } else {
+    // If the last 2 completed daily candles were both heavy bullish closes with higher highs
+    const isHeavyBullishTrend =
+      lastCompletedD1.close > lastCompletedD1.open &&
+      priorD1.close > priorD1.open &&
+      lastCompletedD1.high > priorD1.high;
+
+    if (isHeavyBullishTrend) {
+      return {
+        isHealthy: false,
+        reason: 'موجة صاعدة مستمرة على اليومي (شمعتان صاعدتان متتاليتان) - ممنوع البيع ضد مسار اليوم',
+      };
+    }
+  }
+
+  return { isHealthy: true, reason: '' };
+}
+

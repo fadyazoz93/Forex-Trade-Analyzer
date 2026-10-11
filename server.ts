@@ -94,7 +94,7 @@ function canDispatchSignal(sig: TradeSignal): boolean {
   // 1. Strict Anti-Duplicate Check: If an active unclosed signal already exists for this same currency, DO NOT dispatch another!
   const hasActiveSignal = serverSignals.some((s) => {
     const sKey = normalizeServerSymbol(s.symbol);
-    const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'CANCELLED';
+    const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'BREAKEVEN_HIT' || s.status === 'CANCELLED';
     return sKey === symKey && !isClosed;
   });
 
@@ -102,7 +102,21 @@ function canDispatchSignal(sig: TradeSignal): boolean {
     return false;
   }
 
-  // 2. Cooldown check per symbol
+  // 2. Currency Correlation Exposure Guard:
+  // Max 2 active trades in the same direction against the US Dollar (prevents correlated basket wipeouts)
+  const isUsdPair = sig.symbol.includes('USD');
+  if (isUsdPair) {
+    const activeUsdTrades = serverSignals.filter((s) => {
+      const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'BREAKEVEN_HIT' || s.status === 'CANCELLED';
+      return !isClosed && s.symbol.includes('USD') && s.orderType === sig.orderType;
+    });
+    if (activeUsdTrades.length >= 2) {
+      console.log(`⚠️ [Correlation Guard] Blocked ${sig.symbol} ${sig.orderType}: already 2 active trades with same USD exposure.`);
+      return false;
+    }
+  }
+
+  // 3. Cooldown check per symbol
   const lastEntry = symbolSignalCooldowns.get(symKey);
   if (lastEntry) {
     if (now - lastEntry.timestamp < SIGNAL_COOLDOWN_MS) {
@@ -136,7 +150,7 @@ function trackActiveSignalsLifeCycle() {
   const currentTicks = getAllTicks();
 
   for (const sig of serverSignals) {
-    if (sig.status === 'TP4_HIT' || sig.status === 'SL_HIT' || sig.status === 'CANCELLED') {
+    if (sig.status === 'TP4_HIT' || sig.status === 'SL_HIT' || sig.status === 'BREAKEVEN_HIT' || sig.status === 'CANCELLED') {
       continue;
     }
 

@@ -19,7 +19,8 @@ export interface SymbolConfig {
   tickValue: number;
   tickSize: number;
   metalsReduction?: number; // 0.30 for metals
-  minSLPoints?: number;     // 500 for silver, 120 for scalp
+  minSLPoints?: number;     // Minimum SL points to avoid noise
+  maxSLPoints?: number;     // Absolute ceiling on SL points (prevents wide 500-pip stops)
 }
 
 export interface Candle {
@@ -127,7 +128,7 @@ export interface TradeSignal {
   riskRewardRatio: string;
   score: number;
   gates: SopGatesEvaluation;
-  status: 'ACTIVE' | 'TP1_HIT' | 'TP2_HIT' | 'TP3_HIT' | 'TP4_HIT' | 'SL_HIT' | 'CANCELLED';
+  status: 'ACTIVE' | 'TP1_HIT' | 'TP2_HIT' | 'TP3_HIT' | 'TP4_HIT' | 'SL_HIT' | 'BREAKEVEN_HIT' | 'CANCELLED';
   time: number;
   timeFormatted: string;
   comment: string;
