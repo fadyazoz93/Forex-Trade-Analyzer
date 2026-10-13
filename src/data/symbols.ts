@@ -255,3 +255,18 @@ export const ARCHIVED_SYMBOLS: SymbolConfig[] = [
     tickSize: 0.001,
   },
 ];
+
+/**
+ * Robust symbol resolver that matches regardless of slash, casing, or id vs symbol convention
+ * e.g., 'XAUUSD', 'XAU/USD', 'xauusd' -> finds XAUUSD config
+ */
+export function findTargetSymbol(symOrId?: string): SymbolConfig | undefined {
+  if (!symOrId) return undefined;
+  const clean = symOrId.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return TARGET_SYMBOLS.find((s) => {
+    if (s.id === symOrId || s.symbol === symOrId) return true;
+    const cleanId = s.id.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    const cleanSym = s.symbol.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    return cleanId === clean || cleanSym === clean;
+  });
+}

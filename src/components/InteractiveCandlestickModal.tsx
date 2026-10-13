@@ -16,6 +16,9 @@ import {
   Activity,
   ArrowRight,
   Crosshair,
+  CheckCircle2,
+  Send,
+  Zap,
 } from 'lucide-react';
 import {
   calculateSquareOf9Target,
@@ -32,6 +35,8 @@ interface InteractiveCandlestickModalProps {
   onClose: () => void;
   evaluation?: { evalLong: SopGatesEvaluation; evalShort: SopGatesEvaluation };
   signal?: TradeSignal;
+  availableSignals?: TradeSignal[];
+  onSelectSignal?: (sig: TradeSignal) => void;
   onOpenRiskCalc?: () => void;
 }
 
@@ -41,8 +46,28 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
   onClose,
   evaluation,
   signal,
+  availableSignals,
+  onSelectSignal,
   onOpenRiskCalc,
 }) => {
+  const [selectedSignalId, setSelectedSignalId] = useState<string | null>(signal?.id || null);
+
+  // Sync selectedSignalId if incoming signal prop changes
+  React.useEffect(() => {
+    if (signal?.id) {
+      setSelectedSignalId(signal.id);
+    }
+  }, [signal?.id]);
+
+  // Robustly determine active signal
+  const activeSignal = useMemo(() => {
+    if (selectedSignalId && availableSignals) {
+      const found = availableSignals.find((s) => s.id === selectedSignalId);
+      if (found) return found;
+    }
+    return signal || (availableSignals && availableSignals.length > 0 ? availableSignals[0] : undefined);
+  }, [signal, selectedSignalId, availableSignals]);
+
   const [timeframe, setTimeframe] = useState<Timeframe>('H4');
   const [showSq9, setShowSq9] = useState<boolean>(true);
   const [showGann1x1, setShowGann1x1] = useState<boolean>(true);
@@ -116,12 +141,49 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
   const paddingLeft = 15;
   const plotWidth = chartWidth - paddingRight - paddingLeft;
 
-  // Min / Max price calculation including padding
+  // Min / Max price calculation including candles AND active signal levels (Entry, SL, TP1..TP4)
   const minCandle = candles.reduce((min, c) => Math.min(min, c.low), currentPrice * 0.99);
   const maxCandle = candles.reduce((max, c) => Math.max(max, c.high), currentPrice * 1.01);
-  const priceBuffer = Math.max(symbol.point * 40, (maxCandle - minCandle) * 0.08);
-  const minPrice = minCandle - priceBuffer;
-  const maxPrice = maxCandle + priceBuffer;
+
+  let minChart = minCandle;
+  let maxChart = maxCandle;
+
+  if (activeSignal) {
+    if (activeSignal.entryPrice) {
+      minChart = Math.min(minChart, activeSignal.entryPrice);
+      maxChart = Math.max(maxChart, activeSignal.entryPrice);
+    }
+    if (activeSignal.slPrice) {
+      minChart = Math.min(minChart, activeSignal.slPrice);
+      maxChart = Math.max(maxChart, activeSignal.slPrice);
+    }
+    if (activeSignal.trailingSlPrice) {
+      minChart = Math.min(minChart, activeSignal.trailingSlPrice);
+      maxChart = Math.max(maxChart, activeSignal.trailingSlPrice);
+    }
+    if (activeSignal.tpTargets) {
+      if (activeSignal.tpTargets.tp1) {
+        minChart = Math.min(minChart, activeSignal.tpTargets.tp1);
+        maxChart = Math.max(maxChart, activeSignal.tpTargets.tp1);
+      }
+      if (activeSignal.tpTargets.tp2) {
+        minChart = Math.min(minChart, activeSignal.tpTargets.tp2);
+        maxChart = Math.max(maxChart, activeSignal.tpTargets.tp2);
+      }
+      if (activeSignal.tpTargets.tp3) {
+        minChart = Math.min(minChart, activeSignal.tpTargets.tp3);
+        maxChart = Math.max(maxChart, activeSignal.tpTargets.tp3);
+      }
+      if (activeSignal.tpTargets.tp4) {
+        minChart = Math.min(minChart, activeSignal.tpTargets.tp4);
+        maxChart = Math.max(maxChart, activeSignal.tpTargets.tp4);
+      }
+    }
+  }
+
+  const priceBuffer = Math.max(symbol.point * 40, (maxChart - minChart) * 0.12);
+  const minPrice = minChart - priceBuffer;
+  const maxPrice = maxChart + priceBuffer;
   const priceRange = Math.max(0.00001, maxPrice - minPrice);
 
   // Volume scale
@@ -215,15 +277,15 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
                   <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40">
                     5SOP Gann
                   </span>
-                  {signal && (
+                  {activeSignal && (
                     <span
                       className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-                        signal.orderType.includes('BUY')
+                        activeSignal.orderType.includes('BUY')
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                           : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                       }`}
                     >
-                      {signal.orderType}
+                      {activeSignal.orderType}
                     </span>
                   )}
                 </div>
@@ -407,6 +469,116 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
             </div>
           )}
         </div>
+
+        {/* Signal Information & Telegram Synchronization Banner */}
+        {activeSignal ? (
+          <div className="bg-slate-900 border-b border-slate-800 p-2.5 sm:p-3 px-3 sm:px-5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+              {/* Left Side: Order Badge, Telegram Badge, Status */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`px-2.5 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm ${
+                    activeSignal.orderType.includes('BUY')
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>{activeSignal.orderType}</span>
+                </span>
+
+                {/* Status Badge */}
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-slate-800 text-cyan-300 border border-slate-700">
+                  {activeSignal.status === 'ACTIVE'
+                    ? '🟢 صفقة نشطة جارية'
+                    : activeSignal.status === 'TP1_HIT'
+                    ? '🎯 تم تحقيق الهدف 1 (مؤمّنة BE)'
+                    : activeSignal.status === 'TP2_HIT'
+                    ? '🎯 تم تحقيق الهدف 2'
+                    : activeSignal.status === 'TP3_HIT'
+                    ? '🎯 تم تحقيق الهدف 3'
+                    : activeSignal.status === 'TP4_HIT'
+                    ? '🏆 كامل الأهداف محققة (1:2)'
+                    : activeSignal.status === 'BREAKEVEN_HIT'
+                    ? '🛡️ خروج عند نقطة الدخول (BE)'
+                    : activeSignal.status === 'SL_HIT'
+                    ? '🛑 ضرب وقف الخسارة'
+                    : activeSignal.status}
+                </span>
+
+                {/* Telegram Broadcast Badge */}
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-sky-950/60 text-sky-300 border border-sky-500/30 flex items-center gap-1">
+                  <Send className="w-3 h-3 text-sky-400" />
+                  <span>{activeSignal.telegramSent ? 'مرسلة إلى تليجرام ✓' : 'مزامنة تليجرام النشطة'}</span>
+                </span>
+
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/30 font-mono">
+                  توافق {activeSignal.score}/5 SOP
+                </span>
+              </div>
+
+              {/* Right Side: Key Prices Grid */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs font-mono">
+                <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                  <span className="text-slate-400 font-sans text-[11px]">الدخول:</span>
+                  <strong className="text-cyan-300">{activeSignal.entryPrice.toFixed(symbol.digits)}</strong>
+                </div>
+
+                <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                  <span className="text-rose-400 font-sans text-[11px]">الوقف SL:</span>
+                  <strong className="text-rose-300">{activeSignal.slPrice.toFixed(symbol.digits)}</strong>
+                </div>
+
+                {activeSignal.tpTargets?.tp1 && (
+                  <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                    <span className="text-emerald-400 font-sans text-[11px]">TP1:</span>
+                    <strong className="text-emerald-300">{activeSignal.tpTargets.tp1.toFixed(symbol.digits)}</strong>
+                  </div>
+                )}
+
+                {activeSignal.tpTargets?.tp4 && (
+                  <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                    <span className="text-emerald-400 font-sans text-[11px]">TP4:</span>
+                    <strong className="text-emerald-300">{activeSignal.tpTargets.tp4.toFixed(symbol.digits)}</strong>
+                  </div>
+                )}
+
+                {/* Multi-signal chips if more than 1 signal exists for this currency */}
+                {availableSignals && availableSignals.length > 1 && (
+                  <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+                    <span className="text-[10px] text-slate-500 font-sans">صفقات سابقة:</span>
+                    {availableSignals.map((sig, idx) => (
+                      <button
+                        key={sig.id}
+                        onClick={() => {
+                          setSelectedSignalId(sig.id);
+                          if (onSelectSignal) onSelectSignal(sig);
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                          activeSignal.id === sig.id
+                            ? 'bg-cyan-500 text-slate-950 font-black'
+                            : 'bg-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        #{idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-slate-900/60 border-b border-slate-800 px-4 py-2 text-xs flex items-center justify-between text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5 text-cyan-400" />
+              <span>عرض تحليلي فني شامل لمستويات جان ومربع 9 ومتوسطات الحركة EMA.</span>
+            </span>
+            <span className="text-[11px] text-slate-500 hidden sm:inline">
+              عند توليد إشارة جديدة أو إرسالها إلى تليجرام، ستظهر أهدافها ووقفها تلقائياً على الشارت هنا.
+            </span>
+          </div>
+        )}
 
         {/* Main Chart Canvas Area (SVG Engine) */}
         <div className="relative flex-1 p-2 sm:p-4 bg-slate-950 overflow-hidden select-none touch-none">
@@ -603,12 +775,13 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
               />
             )}
 
-            {/* Signal Levels Overlay: Entry, Stop Loss & Take Profits */}
-            {showSignalLevels && signal && (
+            {/* Signal Levels Overlay: Entry, Stop Loss, Break-Even & Take Profits (TP1, TP2, TP3, TP4) */}
+            {showSignalLevels && activeSignal && (
               <g>
-                {/* Entry Price */}
+                {/* 1. Entry Price */}
                 {(() => {
-                  const y = getY(signal.entryPrice);
+                  const y = getY(activeSignal.entryPrice);
+                  const isBuy = activeSignal.orderType.includes('BUY');
                   return (
                     y >= 0 && y <= mainHeight && (
                       <g>
@@ -618,34 +791,53 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
                           x2={chartWidth - paddingRight}
                           y2={y}
                           stroke="#38bdf8"
-                          strokeWidth="1.8"
+                          strokeWidth="2"
                         />
                         <rect
+                          x={paddingLeft + 6}
+                          y={y - 10}
+                          width={68}
+                          height="20"
+                          rx="4"
+                          fill="#0284c7"
+                          fillOpacity="0.95"
+                        />
+                        <text
+                          x={paddingLeft + 12}
+                          y={y + 4}
+                          fill="#ffffff"
+                          fontSize="10"
+                          fontWeight="bold"
+                          fontFamily="sans-serif"
+                        >
+                          {isBuy ? '🟢 شراء' : '🔴 بيع'}
+                        </text>
+                        <rect
                           x={chartWidth - paddingRight + 4}
-                          y={y - 8}
+                          y={y - 9}
                           width={paddingRight - 8}
-                          height="16"
-                          rx="3"
+                          height="18"
+                          rx="4"
                           fill="#0284c7"
                         />
                         <text
                           x={chartWidth - paddingRight + 8}
-                          y={y + 3}
+                          y={y + 4}
                           fill="#ffffff"
                           fontSize="9"
                           fontWeight="bold"
                           fontFamily="monospace"
                         >
-                          دخول: {signal.entryPrice.toFixed(symbol.digits)}
+                          دخول: {activeSignal.entryPrice.toFixed(symbol.digits)}
                         </text>
                       </g>
                     )
                   );
                 })()}
 
-                {/* Stop Loss (SL) */}
+                {/* 2. Stop Loss (SL) */}
                 {(() => {
-                  const y = getY(signal.slPrice);
+                  const y = getY(activeSignal.slPrice);
                   return (
                     y >= 0 && y <= mainHeight && (
                       <g>
@@ -660,30 +852,32 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
                         />
                         <rect
                           x={chartWidth - paddingRight + 4}
-                          y={y - 8}
+                          y={y - 9}
                           width={paddingRight - 8}
-                          height="16"
-                          rx="3"
+                          height="18"
+                          rx="4"
                           fill="#be123c"
                         />
                         <text
                           x={chartWidth - paddingRight + 8}
-                          y={y + 3}
+                          y={y + 4}
                           fill="#ffffff"
                           fontSize="9"
                           fontWeight="bold"
                           fontFamily="monospace"
                         >
-                          وقف SL: {signal.slPrice.toFixed(symbol.digits)}
+                          وقف SL: {activeSignal.slPrice.toFixed(symbol.digits)}
                         </text>
                       </g>
                     )
                   );
                 })()}
 
-                {/* Target 1 (TP1) */}
+                {/* 3. Trailing Stop / Break-Even (BE) Line if active */}
                 {(() => {
-                  const y = getY(signal.tpTargets.tp1);
+                  if (!activeSignal.breakEvenActive && !activeSignal.trailingSlPrice) return null;
+                  const bePrice = activeSignal.trailingSlPrice || activeSignal.entryPrice;
+                  const y = getY(bePrice);
                   return (
                     y >= 0 && y <= mainHeight && (
                       <g>
@@ -692,27 +886,38 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
                           y1={y}
                           x2={chartWidth - paddingRight}
                           y2={y}
-                          stroke="#10b981"
-                          strokeWidth="1.2"
-                          strokeDasharray="3 3"
+                          stroke="#f59e0b"
+                          strokeWidth="1.8"
+                          strokeDasharray="5 2"
+                        />
+                        <rect
+                          x={chartWidth - paddingRight + 4}
+                          y={y - 9}
+                          width={paddingRight - 8}
+                          height="18"
+                          rx="4"
+                          fill="#b45309"
                         />
                         <text
                           x={chartWidth - paddingRight + 8}
-                          y={y + 3}
-                          fill="#34d399"
+                          y={y + 4}
+                          fill="#ffffff"
                           fontSize="9"
+                          fontWeight="bold"
                           fontFamily="monospace"
                         >
-                          TP1: {signal.tpTargets.tp1.toFixed(symbol.digits)}
+                          تأمين BE: {bePrice.toFixed(symbol.digits)}
                         </text>
                       </g>
                     )
                   );
                 })()}
 
-                {/* Target 4 (TP4 - Full 1:2 R:R) */}
+                {/* 4. Target 1 (TP1) */}
                 {(() => {
-                  const y = getY(signal.tpTargets.tp4);
+                  if (!activeSignal.tpTargets?.tp1) return null;
+                  const y = getY(activeSignal.tpTargets.tp1);
+                  const isHit = activeSignal.highestTargetHit === 'TP1' || activeSignal.highestTargetHit === 'TP2' || activeSignal.highestTargetHit === 'TP3' || activeSignal.highestTargetHit === 'TP4';
                   return (
                     y >= 0 && y <= mainHeight && (
                       <g>
@@ -722,7 +927,8 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
                           x2={chartWidth - paddingRight}
                           y2={y}
                           stroke="#10b981"
-                          strokeWidth="1.8"
+                          strokeWidth={isHit ? "1.8" : "1.2"}
+                          strokeDasharray={isHit ? undefined : "3 3"}
                         />
                         <rect
                           x={chartWidth - paddingRight + 4}
@@ -730,17 +936,136 @@ export const InteractiveCandlestickModal: React.FC<InteractiveCandlestickModalPr
                           width={paddingRight - 8}
                           height="16"
                           rx="3"
-                          fill="#047857"
+                          fill={isHit ? "#047857" : "#064e3b"}
                         />
                         <text
                           x={chartWidth - paddingRight + 8}
                           y={y + 3}
+                          fill={isHit ? "#ffffff" : "#34d399"}
+                          fontSize="9"
+                          fontWeight={isHit ? "bold" : "normal"}
+                          fontFamily="monospace"
+                        >
+                          {isHit ? '✓ TP1: ' : 'TP1: '}{activeSignal.tpTargets.tp1.toFixed(symbol.digits)}
+                        </text>
+                      </g>
+                    )
+                  );
+                })()}
+
+                {/* 5. Target 2 (TP2) */}
+                {(() => {
+                  if (!activeSignal.tpTargets?.tp2) return null;
+                  const y = getY(activeSignal.tpTargets.tp2);
+                  const isHit = activeSignal.highestTargetHit === 'TP2' || activeSignal.highestTargetHit === 'TP3' || activeSignal.highestTargetHit === 'TP4';
+                  return (
+                    y >= 0 && y <= mainHeight && (
+                      <g>
+                        <line
+                          x1={paddingLeft}
+                          y1={y}
+                          x2={chartWidth - paddingRight}
+                          y2={y}
+                          stroke="#10b981"
+                          strokeWidth={isHit ? "1.8" : "1.2"}
+                          strokeDasharray={isHit ? undefined : "3 3"}
+                        />
+                        <rect
+                          x={chartWidth - paddingRight + 4}
+                          y={y - 8}
+                          width={paddingRight - 8}
+                          height="16"
+                          rx="3"
+                          fill={isHit ? "#047857" : "#064e3b"}
+                        />
+                        <text
+                          x={chartWidth - paddingRight + 8}
+                          y={y + 3}
+                          fill={isHit ? "#ffffff" : "#34d399"}
+                          fontSize="9"
+                          fontWeight={isHit ? "bold" : "normal"}
+                          fontFamily="monospace"
+                        >
+                          {isHit ? '✓ TP2: ' : 'TP2: '}{activeSignal.tpTargets.tp2.toFixed(symbol.digits)}
+                        </text>
+                      </g>
+                    )
+                  );
+                })()}
+
+                {/* 6. Target 3 (TP3) */}
+                {(() => {
+                  if (!activeSignal.tpTargets?.tp3) return null;
+                  const y = getY(activeSignal.tpTargets.tp3);
+                  const isHit = activeSignal.highestTargetHit === 'TP3' || activeSignal.highestTargetHit === 'TP4';
+                  return (
+                    y >= 0 && y <= mainHeight && (
+                      <g>
+                        <line
+                          x1={paddingLeft}
+                          y1={y}
+                          x2={chartWidth - paddingRight}
+                          y2={y}
+                          stroke="#10b981"
+                          strokeWidth={isHit ? "1.8" : "1.2"}
+                          strokeDasharray={isHit ? undefined : "3 3"}
+                        />
+                        <rect
+                          x={chartWidth - paddingRight + 4}
+                          y={y - 8}
+                          width={paddingRight - 8}
+                          height="16"
+                          rx="3"
+                          fill={isHit ? "#047857" : "#064e3b"}
+                        />
+                        <text
+                          x={chartWidth - paddingRight + 8}
+                          y={y + 3}
+                          fill={isHit ? "#ffffff" : "#34d399"}
+                          fontSize="9"
+                          fontWeight={isHit ? "bold" : "normal"}
+                          fontFamily="monospace"
+                        >
+                          {isHit ? '✓ TP3: ' : 'TP3: '}{activeSignal.tpTargets.tp3.toFixed(symbol.digits)}
+                        </text>
+                      </g>
+                    )
+                  );
+                })()}
+
+                {/* 7. Target 4 (TP4 - Full 1:2 R:R Target) */}
+                {(() => {
+                  if (!activeSignal.tpTargets?.tp4) return null;
+                  const y = getY(activeSignal.tpTargets.tp4);
+                  const isHit = activeSignal.status === 'TP4_HIT' || activeSignal.highestTargetHit === 'TP4';
+                  return (
+                    y >= 0 && y <= mainHeight && (
+                      <g>
+                        <line
+                          x1={paddingLeft}
+                          y1={y}
+                          x2={chartWidth - paddingRight}
+                          y2={y}
+                          stroke="#10b981"
+                          strokeWidth="2"
+                        />
+                        <rect
+                          x={chartWidth - paddingRight + 4}
+                          y={y - 9}
+                          width={paddingRight - 8}
+                          height="18"
+                          rx="4"
+                          fill="#047857"
+                        />
+                        <text
+                          x={chartWidth - paddingRight + 8}
+                          y={y + 4}
                           fill="#ffffff"
                           fontSize="9"
                           fontWeight="bold"
                           fontFamily="monospace"
                         >
-                          TP4 (1:2): {signal.tpTargets.tp4.toFixed(symbol.digits)}
+                          {isHit ? '🏆 TP4: ' : 'TP4: '}{activeSignal.tpTargets.tp4.toFixed(symbol.digits)}
                         </text>
                       </g>
                     )

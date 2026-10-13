@@ -16,7 +16,7 @@ import {
   Sparkles,
   TrendingDown,
   TrendingUp,
-  Wifi,
+  BarChart3,
   X,
   Zap,
 } from 'lucide-react';
@@ -34,6 +34,7 @@ interface MarketWatchProps {
   liveFeedStatus?: LiveFeedStatus;
   onSelectSymbol: (symbolId: string) => void;
   onInspectGann: (symbol: SymbolConfig) => void;
+  onOpenChart?: (symbol: SymbolConfig) => void;
   onUpdateCustomPrice?: (symbolId: string, price: number) => void;
   onForceSync?: () => void;
 }
@@ -50,6 +51,7 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
   liveFeedStatus,
   onSelectSymbol,
   onInspectGann,
+  onOpenChart,
   onUpdateCustomPrice,
   onForceSync,
 }) => {
@@ -620,19 +622,32 @@ export const MarketWatch: React.FC<MarketWatchProps> = ({
                 </div>
               )}
 
-              {/* Card Footer: Action Button */}
-              <div className="pt-2 border-t border-slate-800/60">
+              {/* Card Footer: Action Buttons */}
+              <div className="pt-2 border-t border-slate-800/60 flex items-center gap-1.5">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onInspectGann(sym);
                   }}
-                  className="w-full min-h-[38px] py-1.5 px-3 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-slate-700/80 cursor-pointer active:scale-98"
+                  className="flex-1 min-h-[38px] py-1.5 px-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer active:scale-98"
                   title="فاحص زوايا جان ومربع التسعة"
                 >
-                  <Compass className="w-4 h-4 text-amber-400" />
-                  <span>فاحص زوايا جان ومربع 9</span>
+                  <Compass className="w-3.5 h-3.5 text-amber-400" />
+                  <span>فاحص جان</span>
                 </button>
+                {onOpenChart && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenChart(sym);
+                    }}
+                    className="flex-1 min-h-[38px] py-1.5 px-2 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-300 hover:text-white text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-cyan-500/40 cursor-pointer active:scale-98"
+                    title="شارت الشموع التفاعلي ومستويات أهداف الصفقة"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>شارت الشموع</span>
+                  </button>
+                )}
               </div>
             </div>
           );

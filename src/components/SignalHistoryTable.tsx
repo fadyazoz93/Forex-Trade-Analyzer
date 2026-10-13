@@ -1,15 +1,17 @@
 import React from 'react';
-import { CheckCircle2, Download, FileSpreadsheet, History, XCircle } from 'lucide-react';
+import { BarChart3, CheckCircle2, Download, FileSpreadsheet, History, XCircle } from 'lucide-react';
 import { TradeSignal } from '../types';
 
 interface SignalHistoryTableProps {
   history: TradeSignal[];
   onExportCSV: () => void;
+  onOpenChartForSignal?: (signal: TradeSignal) => void;
 }
 
 export const SignalHistoryTable: React.FC<SignalHistoryTableProps> = ({
   history,
   onExportCSV,
+  onOpenChartForSignal,
 }) => {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl">
@@ -57,13 +59,14 @@ export const SignalHistoryTable: React.FC<SignalHistoryTableProps> = ({
               <th className="py-2.5 px-3">TP4 (1:2)</th>
               <th className="py-2.5 px-3">مصفوفة 5SOP</th>
               <th className="py-2.5 px-3">الحالة</th>
-              <th className="py-2.5 px-3 text-left">تليجرام</th>
+              <th className="py-2.5 px-3">تليجرام</th>
+              <th className="py-2.5 px-3 text-center">شارت الشموع</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60 font-mono whitespace-nowrap">
             {history.length === 0 ? (
               <tr>
-                <td colSpan={11} className="text-center py-8 text-slate-500 font-sans">
+                <td colSpan={12} className="text-center py-8 text-slate-500 font-sans">
                   لم يتم تسجيل صفقات سابقة بعد
                 </td>
               </tr>
@@ -109,7 +112,7 @@ export const SignalHistoryTable: React.FC<SignalHistoryTableProps> = ({
                         {sig.status === 'ACTIVE' ? 'نشطة' : sig.status}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-left font-sans">
+                    <td className="py-2.5 px-3 font-sans">
                       {sig.telegramSent ? (
                         <span className="text-emerald-400 flex items-center gap-1 text-[11px]">
                           <CheckCircle2 className="w-3.5 h-3.5" />
@@ -117,6 +120,18 @@ export const SignalHistoryTable: React.FC<SignalHistoryTableProps> = ({
                         </span>
                       ) : (
                         <span className="text-slate-500 text-[11px]">معلقة</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-center font-sans">
+                      {onOpenChartForSignal && (
+                        <button
+                          onClick={() => onOpenChartForSignal(sig)}
+                          className="px-2 py-1 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/60 text-cyan-300 hover:text-white border border-cyan-500/40 text-[11px] font-bold flex items-center justify-center gap-1 mx-auto cursor-pointer transition-colors active:scale-95"
+                          title="عرض شارت الشموع ومستويات الصفقة"
+                        >
+                          <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>الشارت</span>
+                        </button>
                       )}
                     </td>
                   </tr>

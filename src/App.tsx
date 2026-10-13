@@ -14,7 +14,7 @@ import { TelegramModal } from './components/TelegramModal';
 import { DatabaseModal } from './components/DatabaseModal';
 import { SessionHolidayModal } from './components/SessionHolidayModal';
 import { SessionHolidayNoticeBanner } from './components/SessionHolidayNoticeBanner';
-import { TARGET_SYMBOLS } from './data/symbols';
+import { TARGET_SYMBOLS, findTargetSymbol } from './data/symbols';
 import { getMarketHoursStatus, MarketHoursStatus } from './services/marketHoursService';
 import {
   emitBatchMarketTicks,
@@ -96,6 +96,7 @@ export default function App() {
   // Modals state
   const [inspectSymbol, setInspectSymbol] = useState<SymbolConfig | null>(null);
   const [chartSymbol, setChartSymbol] = useState<SymbolConfig | null>(null);
+  const [chartSignal, setChartSignal] = useState<TradeSignal | null>(null);
   const [isRiskModalOpen, setIsRiskModalOpen] = useState(false);
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
@@ -252,7 +253,7 @@ export default function App() {
       // Update real-time metrics on all active signals (live pips, live P&L, Break-Even)
       setActiveSignals((prevSignals) =>
         prevSignals.map((sig) => {
-          const symConfig = TARGET_SYMBOLS.find((s) => s.symbol === sig.symbol);
+          const symConfig = findTargetSymbol(sig.symbol);
           const currentTick = symConfig ? latestTicks[symConfig.id] : null;
           if (symConfig && currentTick) {
             return updateSignalRealtimeMetrics(sig, currentTick, symConfig);
@@ -296,6 +297,60 @@ export default function App() {
       clearInterval(rateTimer);
       clearInterval(sweepInterval);
     };
+  }, []);
+
+  // 2. Real-time Synchronization with 24/7 Server Worker Signals (Sent to Telegram)
+  // Ensures any signal broadcast to Telegram is instantly displayed on the chart & feed within seconds
+  useEffect(() => {
+    const syncServerSignals = async () => {
+      try {
+        const res = await fetch('/api/signals');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && Array.isArray(data.signals) && data.signals.length > 0) {
+          const incoming: TradeSignal[] = data.signals;
+
+          // 1. Sync unclosed signals into activeSignals
+          setActiveSignals((prev) => {
+            const map = new Map<string, TradeSignal>();
+            // Add server signals first (they reflect live server tracking & Telegram broadcasts)
+            incoming.forEach((s) => {
+              const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'BREAKEVEN_HIT' || s.status === 'CANCELLED';
+              if (!isClosed) {
+                map.set(s.id, s);
+              }
+            });
+            // Keep local active signals if not closed and not in server
+            prev.forEach((s) => {
+              const isClosed = s.status === 'TP4_HIT' || s.status === 'SL_HIT' || s.status === 'BREAKEVEN_HIT' || s.status === 'CANCELLED';
+              if (!isClosed && !map.has(s.id)) {
+                map.set(s.id, s);
+              }
+            });
+            const merged = Array.from(map.values());
+            activeSignalsRef.current = merged;
+            return merged;
+          });
+
+          // 2. Sync all signals into signalHistory
+          setSignalHistory((prev) => {
+            const map = new Map<string, TradeSignal>();
+            incoming.forEach((s) => map.set(s.id, s));
+            prev.forEach((s) => {
+              if (!map.has(s.id)) map.set(s.id, s);
+            });
+            return Array.from(map.values()).sort((a, b) => b.time - a.time).slice(0, 50);
+          });
+        }
+      } catch {
+        // ignore background poll network hiccups
+      }
+    };
+
+    // Run immediately and poll every 3 seconds
+    syncServerSignals();
+    const syncTimer = setInterval(syncServerSignals, 3000);
+    return () => clearInterval(syncTimer);
   }, []);
 
   // Handle newly caught instant signal on the tick
@@ -707,12 +762,15 @@ export default function App() {
             onSendTelegram={handleSendTelegramSignal}
             isSendingTelegram={isSendingTelegram}
             onSelectSignalForInspection={(sig) => {
-              const sym = TARGET_SYMBOLS.find((s) => s.symbol === sig.symbol);
+              const sym = findTargetSymbol(sig.symbol);
               if (sym) setInspectSymbol(sym);
             }}
             onOpenChartForSignal={(sig) => {
-              const sym = TARGET_SYMBOLS.find((s) => s.symbol === sig.symbol);
-              if (sym) setChartSymbol(sym);
+              const sym = findTargetSymbol(sig.symbol);
+              if (sym) {
+                setChartSymbol(sym);
+                setChartSignal(sig);
+              }
             }}
             isAudioOn={isAudioOn}
             onToggleAudio={handleToggleAudio}
@@ -730,6 +788,12 @@ export default function App() {
             liveFeedStatus={liveFeedStatus}
             onSelectSymbol={setSelectedSymbolId}
             onInspectGann={(sym) => setInspectSymbol(sym)}
+            onOpenChart={(sym) => {
+              setChartSymbol(sym);
+              const matched = activeSignals.find((s) => normalizeSymbolKey(s.symbol) === normalizeSymbolKey(sym.symbol)) ||
+                              signalHistory.find((s) => normalizeSymbolKey(s.symbol) === normalizeSymbolKey(sym.symbol));
+              setChartSignal(matched || null);
+            }}
             onUpdateCustomPrice={handleUpdateCustomPrice}
             onForceSync={forceSyncLivePrices}
           />
@@ -737,7 +801,17 @@ export default function App() {
 
         {/* Signals History & Analytics Table */}
         <div className={mobileTab === 'history' || mobileTab === 'all' ? 'block' : 'hidden md:block'}>
-          <SignalHistoryTable history={signalHistory} onExportCSV={handleExportCSV} />
+          <SignalHistoryTable
+            history={signalHistory}
+            onExportCSV={handleExportCSV}
+            onOpenChartForSignal={(sig) => {
+              const sym = findTargetSymbol(sig.symbol);
+              if (sym) {
+                setChartSymbol(sym);
+                setChartSignal(sig);
+              }
+            }}
+          />
         </div>
 
         {/* Educational Strategy Matrix & Gann Rules Guide */}
@@ -787,9 +861,20 @@ export default function App() {
         <InteractiveCandlestickModal
           symbol={chartSymbol}
           isOpen={true}
-          onClose={() => setChartSymbol(null)}
+          onClose={() => {
+            setChartSymbol(null);
+            setChartSignal(null);
+          }}
           evaluation={evaluations[chartSymbol.id]}
-          signal={activeSignals.find((s) => s.symbol === chartSymbol.symbol)}
+          signal={
+            chartSignal ||
+            activeSignals.find((s) => normalizeSymbolKey(s.symbol) === normalizeSymbolKey(chartSymbol.symbol)) ||
+            signalHistory.find((s) => normalizeSymbolKey(s.symbol) === normalizeSymbolKey(chartSymbol.symbol))
+          }
+          availableSignals={[...activeSignals, ...signalHistory].filter((s) =>
+            normalizeSymbolKey(s.symbol) === normalizeSymbolKey(chartSymbol.symbol)
+          )}
+          onSelectSignal={(sig) => setChartSignal(sig)}
           onOpenRiskCalc={() => {
             setChartSymbol(null);
             setIsRiskModalOpen(true);

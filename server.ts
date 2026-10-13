@@ -538,13 +538,33 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-// Get recent signals detected by the 24/7 worker
-app.get('/api/signals', (req, res) => {
-  res.json({
-    signals: serverSignals,
-    count: serverSignals.length,
-    timestamp: Date.now(),
-  });
+// Get recent signals detected by the 24/7 worker (includes database persistence fallback)
+app.get('/api/signals', async (req, res) => {
+  try {
+    const combined = [...serverSignals];
+    // If in-memory signals is low or empty (e.g. server restart), pull latest signals from Turso database
+    if (combined.length < 15) {
+      const dbRes = await getTradeSignalsFromDb(30);
+      if (dbRes.signals && Array.isArray(dbRes.signals)) {
+        for (const s of dbRes.signals) {
+          if (!combined.some((c) => c.id === s.id)) {
+            combined.push(s);
+          }
+        }
+      }
+    }
+    res.json({
+      signals: combined,
+      count: combined.length,
+      timestamp: Date.now(),
+    });
+  } catch (err: unknown) {
+    res.json({
+      signals: serverSignals,
+      count: serverSignals.length,
+      timestamp: Date.now(),
+    });
+  }
 });
 
 // Manual trigger for sending target hit or breakeven update to Telegram from frontend
