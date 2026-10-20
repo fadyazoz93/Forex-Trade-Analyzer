@@ -148,15 +148,15 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
           </button>
 
-          {/* Turso Database Cloud Records (Desktop) */}
+          {/* Local Database Records (Desktop) */}
           <button
             onClick={onOpenDatabase}
-            className="hidden md:flex min-h-[38px] px-2.5 py-1.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 text-purple-300 text-xs font-semibold border border-purple-800/60 transition-colors items-center justify-center gap-1.5 cursor-pointer"
-            title="سجل صفقات قاعدة البيانات السحابية (Turso LibSQL Cloud)"
+            className="hidden md:flex min-h-[38px] px-2.5 py-1.5 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 text-xs font-semibold border border-emerald-800/60 transition-colors items-center justify-center gap-1.5 cursor-pointer"
+            title="سجل صفقات التخزين المحلي السريع (بدون استهلاك سحابي)"
           >
-            <Database className="w-3.5 h-3.5 text-purple-400" />
-            <span>قاعدة البيانات</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+            <Database className="w-3.5 h-3.5 text-emerald-400" />
+            <span>سجل الصفقات</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
           </button>
 
           {/* Real-time On-Tick Pulse Badge */}

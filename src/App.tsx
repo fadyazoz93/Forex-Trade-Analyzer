@@ -200,7 +200,7 @@ export default function App() {
         handlePerformScan(engineRef.current, false);
       });
 
-    // Initial load of persistent signals from Turso database
+    // Initial load of persistent signals from Local Storage
     fetch('/api/database/signals?limit=30')
       .then((res) => res.json())
       .then((data) => {
@@ -390,7 +390,7 @@ export default function App() {
 
     // Note: 24/7 Automated Telegram broadcasting is handled exclusively by Railway server worker to prevent duplicate client emissions.
 
-    // Persist signal to Turso Cloud Database
+    // Persist signal to Local Storage
     fetch('/api/database/signals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

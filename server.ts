@@ -42,8 +42,10 @@ import {
   getTradeSignalsFromDb,
   getDatabaseStats,
   claimTelegramSignalBroadcast,
-  TURSO_DATABASE_URL,
-} from './src/services/tursoDatabase';
+  clearLocalDatabase,
+  performWeeklyCleanup,
+  checkAndRunScheduledWeeklyCleanup,
+} from './src/services/localDatabase';
 import { TradeSignal } from './src/types';
 
 // Load environment variables
@@ -391,6 +393,8 @@ async function start24x7BackgroundScanner() {
     checkAndDispatchMarketSessionAlerts().catch((err) =>
       console.warn('⚠️ [Market Sessions] Alert dispatch error:', err)
     );
+    // Automatic Scheduled Weekly Data Cleanup (triggers every weekend when market closes)
+    checkAndRunScheduledWeeklyCleanup();
   }, 30000);
 
   // Core strategy scan interval (runs every 6 seconds 24/7)
@@ -421,21 +425,21 @@ async function start24x7BackgroundScanner() {
 
             console.log(`⚡ [Railway 24/7 Worker] Confirmed Signal: ${sig.symbol} ${sig.orderType} (Score: ${sig.score}/5) @ ${sig.entryPrice}`);
 
-            // Persist to Turso LibSQL Database
+            // Persist to Local High-Speed Storage
             saveTradeSignalToDb(sig)
               .then((res) => {
                 if (res.success) {
-                  console.log(`💾 [Turso Database] Signal ${sig.id} (${sig.symbol}) successfully persisted!`);
+                  console.log(`💾 [Local Storage] Signal ${sig.id} (${sig.symbol}) successfully persisted!`);
                 }
               })
-              .catch((err) => console.warn(`⚠️ [Turso Database] Save error:`, err));
+              .catch((err) => console.warn(`⚠️ [Local Storage] Save error:`, err));
 
             // Auto-send to Telegram if enabled
             if (AUTO_SEND) {
-              // Cloud Distributed Anti-Duplicate Lock: guarantees only ONE instance across any platform can send this signal
+              // Distributed Anti-Duplicate Lock: guarantees only ONE instance sends this signal
               const canBroadcast = await claimTelegramSignalBroadcast(sig.symbol, sig.orderType, sig.entryPrice, 60);
               if (!canBroadcast) {
-                console.log(`🛑 [Railway 24/7 Worker] Dropped duplicate Telegram broadcast for ${sig.symbol} (Cloud Lock Active).`);
+                console.log(`🛑 [Railway 24/7 Worker] Dropped duplicate Telegram broadcast for ${sig.symbol} (Local Lock Active).`);
                 continue;
               }
 
@@ -670,16 +674,16 @@ app.post('/api/telegram/test', async (req, res) => {
 });
 
 // ──────────────────────────────────────────────
-// Turso Database Endpoints
+// Local Storage & Database Endpoints
 // ──────────────────────────────────────────────
 
-// Get Turso Database connection status and signal statistics
+// Get Database status and signal statistics (Local Fast Storage, Zero Cloud Quotas)
 app.get('/api/database/status', async (req, res) => {
   try {
     const stats = await getDatabaseStats();
     res.json({
       status: stats.error ? 'error' : 'connected',
-      databaseUrl: TURSO_DATABASE_URL,
+      databaseUrl: 'local://in-memory-storage',
       stats,
       timestamp: Date.now(),
     });
@@ -689,7 +693,7 @@ app.get('/api/database/status', async (req, res) => {
   }
 });
 
-// Retrieve persisted trade signals from Turso database
+// Retrieve persisted trade signals from local storage
 app.get('/api/database/signals', async (req, res) => {
   try {
     const limit = Number(req.query.limit) || 100;
@@ -705,7 +709,7 @@ app.get('/api/database/signals', async (req, res) => {
   }
 });
 
-// Save or manually insert/update a trade signal into Turso database
+// Save or manually insert/update a trade signal into local storage
 app.post('/api/database/signals', async (req, res) => {
   try {
     const signal: TradeSignal = req.body;
@@ -721,16 +725,39 @@ app.post('/api/database/signals', async (req, res) => {
   }
 });
 
+// Clear local database storage to free up all space on demand
+app.post('/api/database/clear', async (req, res) => {
+  try {
+    const result = await clearLocalDatabase();
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Perform weekly data cleanup (clears closed past trades, keeps active live trades)
+app.post('/api/database/weekly-clean', async (req, res) => {
+  try {
+    const preserveActive = req.body?.preserveActive !== false;
+    const result = await performWeeklyCleanup({ preserveActive });
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
 // ──────────────────────────────────────────────
 // Vite Middleware / Static Serving
 // ──────────────────────────────────────────────
 async function startServer() {
-  // Initialize Turso Cloud Database Schema
+  // Initialize Local Lightweight Storage
   try {
-    console.log('📦 [Turso Database] Connecting to LibSQL database at:', TURSO_DATABASE_URL);
+    console.log('📦 [Local Database] Initializing high-speed local storage (No Turso, Zero Cloud Limits)...');
     await initializeDatabase();
   } catch (dbErr) {
-    console.warn('⚠️ [Turso Database] Initial connection warning:', dbErr);
+    console.warn('⚠️ [Local Database] Initial connection warning:', dbErr);
   }
 
   // Start the 24/7 background worker

@@ -105,19 +105,19 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 <span className="text-[10px] text-slate-400">البث التلقائي وفحص القناة</span>
               </button>
 
-              {/* Turso Cloud Database */}
+              {/* Local Storage Database */}
               <button
                 onClick={() => {
                   setIsToolsOpen(false);
                   onOpenDatabase();
                 }}
-                className="p-3 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-purple-500/50 flex flex-col items-start gap-1.5 transition-all text-right cursor-pointer"
+                className="p-3 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-emerald-500/50 flex flex-col items-start gap-1.5 transition-all text-right cursor-pointer"
               >
-                <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center justify-center">
                   <Database className="w-4 h-4" />
                 </div>
-                <span className="text-xs font-bold text-white">سجل قاعدة البيانات</span>
-                <span className="text-[10px] text-slate-400">سجل الصفقات السحابي LibSQL</span>
+                <span className="text-xs font-bold text-white">سجل الصفقات المحلي</span>
+                <span className="text-[10px] text-slate-400">تخزين سريع (بدون كوتا سحابية)</span>
               </button>
 
               {/* Sessions & Holidays */}
