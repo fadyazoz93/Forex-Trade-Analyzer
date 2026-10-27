@@ -26,6 +26,7 @@ import {
   sendEconomicDecisionAlertToTelegram,
   sendDailyMarketBriefToTelegram,
   testTelegramConnection,
+  sendTelegramMultiTarget,
 } from './src/services/telegramService';
 import {
   SESSIONS_LIST,
@@ -46,6 +47,12 @@ import {
   performWeeklyCleanup,
   checkAndRunScheduledWeeklyCleanup,
 } from './src/services/localDatabase';
+import {
+  handleIncomingMt5Tick,
+  handleIncomingMt5BatchCandles,
+  getMt5BridgeStatus,
+  generateMql5BridgeCode,
+} from './src/services/mt5BridgeService';
 import { TradeSignal } from './src/types';
 
 // Load environment variables
@@ -325,6 +332,23 @@ async function checkAndDispatchMarketSessionAlerts() {
       sentSessionEventsToday.add(key);
       console.log('📢 [Railway 24/7 Worker] Dispatching Golden Overlap Kill Zone (+30 min post-open)...');
       await sendKillZoneAlertToTelegram('OVERLAP', BOT_TOKEN, [CHANNEL_ID]);
+    }
+  }
+
+  // 5b. Pre-New York Open Volatility & Breakeven Warning (14:10 - 14:20 UTC / 05:10 PM Mecca)
+  if (utcHour === 14 && utcMin >= 10 && utcMin < 20) {
+    const key = `PRE_NY_OPEN_BE_WARN_${dateKey}`;
+    if (!sentSessionEventsToday.has(key)) {
+      sentSessionEventsToday.add(key);
+      console.log('📢 [Railway 24/7 Worker] Dispatching Pre-NY Open Warning & Breakeven reminder...');
+      const msg = [
+        `⚠️ <b>تنبيه استباقي: اقتراب جرس افتتاح نيويورك والسيولة الأمريكية</b>`,
+        `─────────────────`,
+        `🏛️ تستعد بورصة وول ستريت للافتتاح وبدء تدفق السيولة الأمريكية العالية.`,
+        `🔒 <b>توجيه إدارة المخاطر:</b> يرجى نقل وقف الخسارة إلى نقطة الدخول (Breakeven) لأي صفقات رابحة مفتوحة لحماية الأرباح من حركات صيد السيولة (Stop Hunts).`,
+        `🛡️ الماسح في وضع الحماية المؤقت لمنع الدخول العشوائي قبل استقرار اتجاه الجلسة.`,
+      ].join('\n');
+      sendTelegramMultiTarget(BOT_TOKEN, [CHANNEL_ID], msg).catch(() => {});
     }
   }
 
@@ -667,6 +691,74 @@ app.post('/api/telegram/test', async (req, res) => {
 
     const result = await testTelegramConnection(BOT_TOKEN, targets);
     res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+// ──────────────────────────────────────────────
+// MetaTrader 5 (MT5) Live Bridge Endpoints
+// ──────────────────────────────────────────────
+
+// Receive real-time tick and candle close from MT5 WebRequest
+app.post('/api/mt5/feed', (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || !payload.symbol || payload.bid === undefined || payload.ask === undefined) {
+      return res.status(400).json({ success: false, error: 'Invalid tick payload: symbol, bid, ask are required' });
+    }
+
+    const result = handleIncomingMt5Tick(payload);
+    res.json({ success: true, symbol: result.symbolId, serverTime: Date.now() });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Receive batch historical candles from MT5
+app.post('/api/mt5/batch-candles', (req, res) => {
+  try {
+    const payload = req.body;
+    if (!payload || !payload.symbol || !payload.candles) {
+      return res.status(400).json({ success: false, error: 'Invalid batch payload: symbol and candles array are required' });
+    }
+
+    const result = handleIncomingMt5BatchCandles(payload);
+    res.json(result);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Get MT5 Bridge Status
+app.get('/api/mt5/status', (req, res) => {
+  try {
+    const status = getMt5BridgeStatus();
+    res.json({ success: true, ...status });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.status(500).json({ success: false, error: message });
+  }
+});
+
+// Download or view the MQL5 Expert Advisor source code
+app.get('/api/mt5/ea-script', (req, res) => {
+  try {
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const host = req.headers.host || `localhost:${PORT}`;
+    const serverUrl = `${protocol}://${host}`;
+    const script = generateMql5BridgeCode(serverUrl);
+
+    if (req.query.download === 'true') {
+      res.setHeader('Content-Disposition', 'attachment; filename="MT5_AIS_Bridge_EA.mq5"');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.send(script);
+    }
+
+    res.json({ success: true, serverUrl, script });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     res.status(500).json({ success: false, error: message });

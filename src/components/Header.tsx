@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Clock, Send, Shield, Volume2, VolumeX, Zap, Radio, TrendingUp, Database, Calendar } from 'lucide-react';
+import { Activity, Clock, Send, Shield, Volume2, VolumeX, Zap, Radio, TrendingUp, Database, Calendar, Terminal } from 'lucide-react';
 import { EngineMode, ShieldStatus } from '../types';
 
 interface HeaderProps {
@@ -10,6 +10,7 @@ interface HeaderProps {
   onOpenRiskCalc: () => void;
   onOpenDatabase: () => void;
   onOpenSessionHolidays?: () => void;
+  onOpenMt5Bridge?: () => void;
   isWeekend?: boolean;
   shieldStatus: ShieldStatus;
   activeSignalCount: number;
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRiskCalc,
   onOpenDatabase,
   onOpenSessionHolidays,
+  onOpenMt5Bridge,
   isWeekend = false,
   shieldStatus,
   activeSignalCount,
@@ -158,6 +160,19 @@ export const Header: React.FC<HeaderProps> = ({
             <span>سجل الصفقات</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
           </button>
+
+          {/* MT5 Live Bridge (Desktop) */}
+          {onOpenMt5Bridge && (
+            <button
+              onClick={onOpenMt5Bridge}
+              className="hidden lg:flex min-h-[38px] px-2.5 py-1.5 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 text-xs font-semibold border border-cyan-800/60 transition-colors items-center justify-center gap-1.5 cursor-pointer"
+              title="ربط الأسعار والشموع مباشرة من MetaTrader 5"
+            >
+              <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+              <span>ربط MT5</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            </button>
+          )}
 
           {/* Real-time On-Tick Pulse Badge */}
           <div

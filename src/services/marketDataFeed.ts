@@ -452,6 +452,67 @@ export function populateCandleStoresFromRemote(stores: Record<string, SymbolCand
 }
 
 /**
+ * Ingest live tick received from MetaTrader 5 bridge
+ */
+export function ingestMt5TickToStore(symbolId: string, tickData: { bid: number; ask: number; time: number }) {
+  const sym = TARGET_SYMBOLS.find((s) => s.id === symbolId);
+  const digits = sym?.digits || 2;
+  const spreadPts = sym ? Math.round(Math.abs(tickData.ask - tickData.bid) / sym.point) : 25;
+
+  const prevTick = latestTicks.get(symbolId);
+  const baselinePrice = sym?.initialPrice || tickData.bid;
+  const change24h = prevTick?.change24h ?? Number((((tickData.bid - baselinePrice) / baselinePrice) * 100).toFixed(2));
+
+  const tick: MarketTick = {
+    symbol: sym?.symbol || symbolId,
+    bid: tickData.bid,
+    ask: tickData.ask,
+    spreadPts,
+    time: tickData.time || Date.now(),
+    change24h,
+  };
+
+  latestTicks.set(symbolId, tick);
+
+  // Propagate tick into live candle roll-overs
+  const store = candleDatabase.get(symbolId);
+  if (store) {
+    const midPrice = Number(((tickData.bid + tickData.ask) / 2).toFixed(digits));
+    updateCandleWithRollover(store.M1, midPrice, 'M1', tick.time);
+    updateCandleWithRollover(store.M5, midPrice, 'M5', tick.time);
+    updateCandleWithRollover(store.M15, midPrice, 'M15', tick.time);
+    updateCandleWithRollover(store.H1, midPrice, 'H1', tick.time);
+    updateCandleWithRollover(store.H4, midPrice, 'H4', tick.time);
+    updateCandleWithRollover(store.D1, midPrice, 'D1', tick.time);
+  }
+}
+
+/**
+ * Ingest historical/live candles received from MetaTrader 5 bridge
+ */
+export function ingestMt5CandlesToStore(symbolId: string, tf: Timeframe, candles: Candle[]) {
+  const store = candleDatabase.get(symbolId);
+  if (!store || !candles || candles.length === 0) return;
+
+  const currentTfCandles = store[tf];
+  if (!currentTfCandles || currentTfCandles.length === 0) {
+    store[tf] = candles;
+    return;
+  }
+
+  // Merge candles: update existing or append
+  candles.forEach((incoming) => {
+    const idx = currentTfCandles.findIndex((c) => Math.abs(c.time - incoming.time) < 1000);
+    if (idx !== -1) {
+      currentTfCandles[idx] = incoming;
+    } else if (incoming.time > currentTfCandles[currentTfCandles.length - 1].time) {
+      currentTfCandles.push(incoming);
+      if (currentTfCandles.length > 200) currentTfCandles.shift();
+    }
+  });
+}
+
+/**
  * Connect to live WebSocket and real-time cloud APIs
  */
 export function startCloudRealtimeFeed() {

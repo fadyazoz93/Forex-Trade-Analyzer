@@ -48,6 +48,24 @@ export function isAsianCrossPairBlocked(symbol: string, date = new Date()): bool
   return curMin >= 23 * 60 || curMin < 7 * 60 + 30;
 }
 
+/**
+ * Pre-New York Open Volatility & Economic Data Shield:
+ * Protects against stop-hunts and whipsaws right ahead of the Wall Street opening bell & US data releases
+ * Covers 13:10 - 13:40 UTC (US Data 8:30 AM) and 14:10 - 14:35 UTC (NYSE Bell 9:30 AM)
+ */
+export function isPreNyOpenBlocked(date = new Date()): boolean {
+  const utcHour = date.getUTCHours();
+  const utcMin = date.getUTCMinutes();
+  const curMin = utcHour * 60 + utcMin;
+
+  // 13:10 to 13:40 UTC (US 8:30 AM data releases & pre-market prep)
+  const isEarlyDataWindow = curMin >= 13 * 60 + 10 && curMin <= 13 * 60 + 40;
+  // 14:10 to 14:35 UTC (US 9:30 AM Wall Street equity opening bell spike)
+  const isNyOpenBellWindow = curMin >= 14 * 60 + 10 && curMin <= 14 * 60 + 35;
+
+  return isEarlyDataWindow || isNyOpenBellWindow;
+}
+
 export function getShieldStatus(): ShieldStatus {
   const now = new Date();
   const utcDay = now.getUTCDay(); // 0 = Sun, 5 = Fri
@@ -67,7 +85,10 @@ export function getShieldStatus(): ShieldStatus {
   // 4. Sunday Open: 21:00 - 23:30 UTC
   const isSundayOpenBlocked = utcDay === 0 && curMin >= 21 * 60 && curMin <= 23 * 60 + 30;
 
-  // 5. Weekend Market Closure
+  // 5. Pre-New York Open Volatility Trap: 13:10-13:40 & 14:10-14:35 UTC
+  const isPreNyBlocked = isPreNyOpenBlocked(now);
+
+  // 6. Weekend Market Closure
   const isWeekendBlocked = isWeekendMarketClosed(now);
 
   // Active Sessions (Only populated if NOT in weekend closure)
@@ -85,6 +106,7 @@ export function getShieldStatus(): ShieldStatus {
     !isRolloverBlocked &&
     !isFridayAfternoonBlocked &&
     !isSundayOpenBlocked &&
+    !isPreNyBlocked &&
     activeSessions.length > 0;
 
   return {
@@ -92,6 +114,7 @@ export function getShieldStatus(): ShieldStatus {
     isRolloverBlocked,
     isFridayAfternoonBlocked,
     isSundayOpenBlocked,
+    isPreNyBlocked,
     isWeekendBlocked,
     isSessionActive,
     isNewsUpcoming: false,

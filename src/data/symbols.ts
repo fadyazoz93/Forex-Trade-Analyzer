@@ -28,8 +28,8 @@ export const TARGET_SYMBOLS: SymbolConfig[] = [
     tickValue: 1.0,
     tickSize: 0.01,
     metalsReduction: 0.30, // 30% lot reduction rule
-    minSLPoints: 250,      // Minimum $2.50 ATR cushion for gold
-    maxSLPoints: 450,      // Hard ceiling: max $4.50 stop loss (prevents wide 50-dollar stops!)
+    minSLPoints: 450,      // Minimum $4.50 ATR cushion for gold at $4,000+ price level
+    maxSLPoints: 850,      // Safe ceiling: max $8.50 stop loss (protects capital while preventing noise squeeze)
   },
   {
     id: 'GBPJPY',

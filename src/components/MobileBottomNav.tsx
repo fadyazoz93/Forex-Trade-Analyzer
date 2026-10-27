@@ -14,6 +14,7 @@ import {
   VolumeX,
   X,
   Zap,
+  Terminal,
 } from 'lucide-react';
 
 export type MobileTab = 'signals' | 'market' | 'sessions' | 'history' | 'all';
@@ -26,6 +27,7 @@ interface MobileBottomNavProps {
   onOpenTelegram: () => void;
   onOpenDatabase: () => void;
   onOpenSessions: () => void;
+  onOpenMt5Bridge?: () => void;
   isAudioOn: boolean;
   onToggleAudio: () => void;
   isWeekend?: boolean;
@@ -39,6 +41,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onOpenTelegram,
   onOpenDatabase,
   onOpenSessions,
+  onOpenMt5Bridge,
   isAudioOn,
   onToggleAudio,
   isWeekend = false,
@@ -134,6 +137,28 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 <span className="text-xs font-bold text-white">الجلسات والعطلات</span>
                 <span className="text-[10px] text-slate-400">{isWeekend ? 'السوق مغلق حالياً' : 'مواعيد البورصات'}</span>
               </button>
+
+              {/* MT5 Live Feed Bridge */}
+              {onOpenMt5Bridge && (
+                <button
+                  onClick={() => {
+                    setIsToolsOpen(false);
+                    onOpenMt5Bridge();
+                  }}
+                  className="p-3 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-cyan-500/50 flex flex-col items-start gap-1.5 transition-all text-right cursor-pointer col-span-2"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <div className="w-8 h-8 rounded-xl bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 flex items-center justify-center">
+                      <Terminal className="w-4 h-4" />
+                    </div>
+                    <span className="text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full font-mono">
+                      Live MT5 Bridge
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold text-white">ربط منصة MetaTrader 5</span>
+                  <span className="text-[10px] text-slate-400">بث الأسعار والشموع الحية مباشرة من حسابك في MT5</span>
+                </button>
+              )}
             </div>
 
             {/* Audio Toggle & View All Options */}

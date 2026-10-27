@@ -12,6 +12,7 @@ import { SignalHistoryTable } from './components/SignalHistoryTable';
 import { StrategyMatrixExplainer } from './components/StrategyMatrixExplainer';
 import { TelegramModal } from './components/TelegramModal';
 import { DatabaseModal } from './components/DatabaseModal';
+import { Mt5BridgeModal } from './components/Mt5BridgeModal';
 import { SessionHolidayModal } from './components/SessionHolidayModal';
 import { SessionHolidayNoticeBanner } from './components/SessionHolidayNoticeBanner';
 import { TARGET_SYMBOLS, findTargetSymbol } from './data/symbols';
@@ -101,6 +102,7 @@ export default function App() {
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState(false);
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
   const [isSessionHolidayModalOpen, setIsSessionHolidayModalOpen] = useState(false);
+  const [isMt5ModalOpen, setIsMt5ModalOpen] = useState(false);
   const [marketHoursStatus, setMarketHoursStatus] = useState<MarketHoursStatus>(() => getMarketHoursStatus());
 
   // Settings state (defaults to realistic $1,000 retail account with 1% risk)
@@ -672,6 +674,7 @@ export default function App() {
         onOpenRiskCalc={() => setIsRiskModalOpen(true)}
         onOpenDatabase={() => setIsDatabaseModalOpen(true)}
         onOpenSessionHolidays={() => setIsSessionHolidayModalOpen(true)}
+        onOpenMt5Bridge={() => setIsMt5ModalOpen(true)}
         isWeekend={marketHoursStatus.isWeekend}
         shieldStatus={shieldStatus}
         activeSignalCount={activeSignals.length}
@@ -842,6 +845,7 @@ export default function App() {
         onOpenTelegram={() => setIsTelegramModalOpen(true)}
         onOpenDatabase={() => setIsDatabaseModalOpen(true)}
         onOpenSessions={() => setIsSessionHolidayModalOpen(true)}
+        onOpenMt5Bridge={() => setIsMt5ModalOpen(true)}
         isAudioOn={isAudioOn}
         onToggleAudio={handleToggleAudio}
         isWeekend={marketHoursStatus.isWeekend}
@@ -899,6 +903,12 @@ export default function App() {
       <DatabaseModal
         isOpen={isDatabaseModalOpen}
         onClose={() => setIsDatabaseModalOpen(false)}
+      />
+
+      {/* MetaTrader 5 (MT5) Live Feed Bridge Modal */}
+      <Mt5BridgeModal
+        isOpen={isMt5ModalOpen}
+        onClose={() => setIsMt5ModalOpen(false)}
       />
 
       {/* Sessions and Holidays Comprehensive Modal */}

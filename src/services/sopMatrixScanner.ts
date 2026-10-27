@@ -38,6 +38,7 @@ import { getCandles, getLatestTick } from './marketDataFeed';
 import {
   isAsianCrossPairBlocked,
   isLateNyOrRolloverBlocked,
+  isPreNyOpenBlocked,
   isWeekendMarketClosed,
 } from './shieldMonitor';
 
@@ -261,10 +262,13 @@ export function evaluateSopGates(
   }
 
   // 3. Absolute Hard Dollar Loss Guard:
-  // On a 0.01 micro lot, the maximum loss at stop MUST NEVER EXCEED $4.50!
+  // Dynamically sized according to asset class:
+  // For Gold (XAUUSD): allows up to $8.50 cushion (still only ~0.2% of price at $4000+)
+  // For Forex pairs: keeps strict ~$4.50 ceiling on 0.01 micro lot
   const pointValuePerLot = (sym.tickValue / sym.tickSize) * sym.point;
   if (pointValuePerLot > 0) {
-    const maxDollarLossPoints = 4.50 / (0.01 * pointValuePerLot);
+    const maxDollarCap = sym.category === 'metal' ? 8.50 : 4.50;
+    const maxDollarLossPoints = maxDollarCap / (0.01 * pointValuePerLot);
     const maxSafeDollarDistance = maxDollarLossPoints * sym.point;
     if (safeDistance > maxSafeDollarDistance) {
       safeDistance = maxSafeDollarDistance;
@@ -336,7 +340,37 @@ export function evaluateSopGates(
 }
 
 /**
- * Computes Quad scale-out targets (TP1 to TP4 optimized for 1:3 R:R)
+ * Institutional Major Round Number Front-Running Buffer:
+ * Major round numbers (e.g. 4000.00, 4050.00 on Gold) act as massive defense zones
+ * where institutional counter-orders sit. This function front-runs round barriers so take profit fills BEFORE
+ * the institutional defense wall triggers an adverse reversal.
+ */
+function applyRoundNumberBuffer(rawTarget: number, isLong: boolean, digits: number): number {
+  if (digits === 2) {
+    // Metals (Gold / Silver)
+    const remainder = Math.abs(rawTarget % 10);
+    // If long target lands right at or slightly above round level (e.g. 4000.20 or 4001.50)
+    // Front-run resistance wall
+    if (isLong && (remainder <= 1.5 || remainder >= 8.5)) {
+      const nearestTen = Math.round(rawTarget / 10) * 10;
+      if (rawTarget >= nearestTen - 1.5 && rawTarget <= nearestTen + 2.5) {
+        return Number((nearestTen - 1.80).toFixed(digits));
+      }
+    }
+    // If short target lands right at or slightly below round level (e.g. 4000.27 or 3998.80)
+    // Front-run institutional buy bounce wall
+    if (!isLong && (remainder <= 1.5 || remainder >= 8.5)) {
+      const nearestTen = Math.round(rawTarget / 10) * 10;
+      if (rawTarget <= nearestTen + 1.5 && rawTarget >= nearestTen - 2.5) {
+        return Number((nearestTen + 1.80).toFixed(digits));
+      }
+    }
+  }
+  return Number(rawTarget.toFixed(digits));
+}
+
+/**
+ * Computes Quad scale-out targets (TP1 to TP4 optimized for 1:3 R:R with Round Number Buffer)
  */
 export function calculateQuadTargets(
   entryPrice: number,
@@ -345,11 +379,16 @@ export function calculateQuadTargets(
   digits: number
 ): QuadTargets {
   const sign = isLong ? 1 : -1;
+  const raw1 = entryPrice + sign * (riskDist * 1.0);
+  const raw2 = entryPrice + sign * (riskDist * 1.5);
+  const raw3 = entryPrice + sign * (riskDist * 2.0);
+  const raw4 = entryPrice + sign * (riskDist * 3.0);
+
   return {
-    tp1: Number((entryPrice + sign * (riskDist * 1.0)).toFixed(digits)), // 1.0 R (Secure Profit & Move SL to BE)
-    tp2: Number((entryPrice + sign * (riskDist * 1.5)).toFixed(digits)), // 1.5 R (Lock +0.5R)
-    tp3: Number((entryPrice + sign * (riskDist * 2.0)).toFixed(digits)), // 2.0 R (Lock +1.0R & Trailing)
-    tp4: Number((entryPrice + sign * (riskDist * 3.0)).toFixed(digits)), // 3.0 R (Runner for High Reward)
+    tp1: applyRoundNumberBuffer(raw1, isLong, digits), // 1.0 R (Secure Profit & Move SL to BE)
+    tp2: applyRoundNumberBuffer(raw2, isLong, digits), // 1.5 R (Lock +0.5R)
+    tp3: applyRoundNumberBuffer(raw3, isLong, digits), // 2.0 R (Lock +1.0R & Trailing)
+    tp4: applyRoundNumberBuffer(raw4, isLong, digits), // 3.0 R (Runner for High Reward)
   };
 }
 
@@ -386,7 +425,12 @@ export function scanMarketWatchSymbols(
       return;
     }
 
-    // 4. Post-SL Cooldown Penalty Shield: Freeze symbol for 6 hours if it recently hit Stop Loss!
+    // 4. Pre-New York Open Volatility & Stop-Hunt Shield (13:10-13:40 & 14:10-14:35 UTC)
+    if (isPreNyOpenBlocked()) {
+      return;
+    }
+
+    // 5. Post-SL Cooldown Penalty Shield: Freeze symbol for 6 hours if it recently hit Stop Loss!
     if (isSymbolInSlCooldown(sym.symbol)) {
       return;
     }
